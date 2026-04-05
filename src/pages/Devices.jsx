@@ -80,7 +80,12 @@ const Devices = () => {
         prev.filter((d) => String(d.device_id ?? d.id) !== String(rawId))
       );
     } catch (err) {
-      setDeleteError(err.message || 'Xóa thiết bị thất bại');
+      const msg = String(err?.message || '').toLowerCase();
+      if (msg.includes('method not allowed')) {
+        setDeleteError('Backend hiện tại chưa deploy endpoint xóa thiết bị (DELETE /api/devices/{id}).');
+      } else {
+        setDeleteError(err.message || 'Xóa thiết bị thất bại');
+      }
     } finally {
       setDeleting(false);
     }

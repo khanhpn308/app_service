@@ -77,7 +77,46 @@ export default function UserManagement() {
     setLoading(true);
     try {
       const list = await apiFetch('/api/users');
-      setUsers(Array.isArray(list) ? list : []);
+      const baseUsers = Array.isArray(list) ? list : [];
+
+      // Backward-compatible: nếu backend cũ chưa trả authorized_devices trong GET /users,
+      // frontend tự tổng hợp từ /authorizations?user_id=... để vẫn hiển thị đúng.
+      const needBackfill = baseUsers.some((u) => !Array.isArray(u.authorized_devices));
+      if (!needBackfill) {
+        setUsers(baseUsers);
+        return;
+      }
+
+      let devicesById = new Map();
+      try {
+        const allDevices = await apiFetch('/api/devices');
+        devicesById = new Map(
+          (Array.isArray(allDevices) ? allDevices : []).map((d) => [
+            String(d.device_id),
+            d.devicename ?? null,
+          ])
+        );
+      } catch {
+        // Không chặn luồng chính nếu endpoint devices lỗi.
+      }
+
+      const enriched = await Promise.all(
+        baseUsers.map(async (u) => {
+          try {
+            const auths = await apiFetch(
+              `/api/authorizations?user_id=${encodeURIComponent(u.user_id)}`
+            );
+            const authorized_devices = (Array.isArray(auths) ? auths : []).map((a) => ({
+              device_id: a.device_id,
+              devicename: devicesById.get(String(a.device_id)) ?? null,
+            }));
+            return { ...u, authorized_devices };
+          } catch {
+            return { ...u, authorized_devices: [] };
+          }
+        })
+      );
+      setUsers(enriched);
     } catch (e) {
       setLoadError(e.message || 'Không tải được danh sách');
       setUsers([]);
