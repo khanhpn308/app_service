@@ -27,8 +27,75 @@ const Devices = () => {
       try {
         const path = isAdmin() ? '/api/devices' : '/api/devices/my';
         const list = await apiFetch(path);
+        let normalizedList = Array.isArray(list) ? list : [];
+
+        // Admin view: enrich each device with assigned users (RBAC) for quick visibility on cards.
+        if (isAdmin()) {
+          try {
+            const users = await apiFetch('/api/users');
+            const userList = Array.isArray(users) ? users : [];
+            const managerMap = new Map();
+
+            const usersHaveAuthorizedField = userList.every((u) =>
+              Array.isArray(u.authorized_devices)
+            );
+
+            if (usersHaveAuthorizedField) {
+              // Preferred path: invert /users[].authorized_devices -> device_id => users[]
+              for (const u of userList) {
+                for (const d of u.authorized_devices || []) {
+                  const key = String(d.device_id);
+                  const arr = managerMap.get(key) || [];
+                  arr.push({
+                    user_id: u.user_id,
+                    username: u.username,
+                    fullname: u.fullname,
+                  });
+                  managerMap.set(key, arr);
+                }
+              }
+            } else {
+              // Fallback path: older backend (no authorized_devices in /users)
+              const userById = new Map(userList.map((u) => [String(u.user_id), u]));
+              await Promise.all(
+                normalizedList.map(async (d) => {
+                  const deviceId = d.device_id ?? d.id;
+                  if (deviceId == null) return;
+                  try {
+                    const auths = await apiFetch(
+                      `/api/authorizations?device_id=${encodeURIComponent(deviceId)}`
+                    );
+                    const arr = (Array.isArray(auths) ? auths : []).map((a) => {
+                      const u = userById.get(String(a.user_id));
+                      return {
+                        user_id: a.user_id,
+                        username: u?.username ?? `user_${a.user_id}`,
+                        fullname: u?.fullname ?? `User ${a.user_id}`,
+                      };
+                    });
+                    managerMap.set(String(deviceId), arr);
+                  } catch {
+                    managerMap.set(String(deviceId), []);
+                  }
+                })
+              );
+            }
+
+            normalizedList = normalizedList.map((d) => {
+              const deviceId = d.device_id ?? d.id;
+              const managersRaw = managerMap.get(String(deviceId)) || [];
+              const dedup = new Map();
+              for (const m of managersRaw) dedup.set(String(m.user_id), m);
+              return { ...d, managers: Array.from(dedup.values()) };
+            });
+          } catch {
+            // Keep devices list visible even if manager enrichment fails.
+            normalizedList = normalizedList.map((d) => ({ ...d, managers: [] }));
+          }
+        }
+
         if (!mounted) return;
-        setDevices(Array.isArray(list) ? list : []);
+        setDevices(normalizedList);
       } catch (e) {
         if (!mounted) return;
         // fallback to mock for UI continuity
@@ -181,6 +248,28 @@ const Devices = () => {
           <Clock className="h-4 w-4" />
           <span className="text-xs">{device.lastUpdate}</span>
         </div>
+
+        {isAdmin() && (
+          <div className="bg-slate-900 rounded-lg p-3 mb-4">
+            <p className="text-slate-500 text-xs mb-1">Được phân quyền cho</p>
+            {Array.isArray(device.managers) && device.managers.length > 0 ? (
+              <div className="space-y-1 max-h-20 overflow-y-auto">
+                {device.managers.slice(0, 3).map((m) => (
+                  <p key={m.user_id} className="text-slate-200 text-xs">
+                    {m.fullname} <span className="text-slate-500">@{m.username}</span>
+                  </p>
+                ))}
+                {device.managers.length > 3 && (
+                  <p className="text-slate-500 text-[11px]">
+                    +{device.managers.length - 3} user khác
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-slate-500 text-xs">Chưa phân quyền cho user nào</p>
+            )}
+          </div>
+        )}
 
         {/* Current Value */}
         <div className="bg-slate-900 rounded-lg p-3 mb-4">
