@@ -1,10 +1,15 @@
+from collections import defaultdict
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_admin
 from app.core.user_expiry import deactivate_expired_users
+from app.models.device import Device
+from app.models.device_authorization import DeviceAuthorization
 from app.models.user import User
 from app.schemas.auth import UserPublic, UserStatusPatch
+from app.schemas.authorizations import AuthorizedDeviceBrief
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -16,7 +21,20 @@ def list_users(
 ) -> list[UserPublic]:
     deactivate_expired_users(db)
     rows = db.query(User).order_by(User.user_id.asc()).all()
-    return [UserPublic.model_validate(u) for u in rows]
+    pairs = (
+        db.query(DeviceAuthorization.user_id, Device.device_id, Device.devicename)
+        .join(Device, Device.device_id == DeviceAuthorization.device_id)
+        .order_by(DeviceAuthorization.user_id.asc(), DeviceAuthorization.device_id.asc())
+        .all()
+    )
+    by_user: dict[int, list[AuthorizedDeviceBrief]] = defaultdict(list)
+    for uid, did, name in pairs:
+        by_user[uid].append(AuthorizedDeviceBrief(device_id=did, devicename=name))
+    out: list[UserPublic] = []
+    for u in rows:
+        base = UserPublic.model_validate(u)
+        out.append(base.model_copy(update={"authorized_devices": by_user.get(u.user_id, [])}))
+    return out
 
 
 @router.patch("/{user_id}", response_model=UserPublic)

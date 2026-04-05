@@ -3,6 +3,13 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 
+class AuthorizedDeviceBrief(BaseModel):
+    """Thiết bị đã phân quyền cho user (dùng trong GET /users)."""
+
+    device_id: int
+    devicename: str | None = None
+
+
 class AuthorizationCreate(BaseModel):
     device_id: int
     user_id: int

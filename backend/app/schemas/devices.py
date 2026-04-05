@@ -33,8 +33,17 @@ class DevicePublic(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DeviceAuthorizedUser(BaseModel):
+    """User được phân quyền truy cập thiết bị (device_authorization + user)."""
+
+    user_id: int
+    username: str
+    fullname: str
+    expired_at: date | None = None
+
+
 class DeviceDetailPublic(BaseModel):
-    """Single device for detail page (includes password for admin / authorized user)."""
+    """Chi tiết thiết bị: mật khẩu cho mọi người có quyền; user_device_asignment_id chỉ admin."""
 
     device_id: int
     devicename: str | None = None
@@ -42,6 +51,8 @@ class DeviceDetailPublic(BaseModel):
     password: str | None = None
     location: str | None = None
     device_type: str | None = None
+    user_device_asignment_id: int | None = None
+    authorized_users: list[DeviceAuthorizedUser] = []
 
     model_config = {"from_attributes": True}
 
@@ -54,6 +65,7 @@ class DeviceUpdate(BaseModel):
     devicename: str | None = Field(default=None, max_length=45)
     password: str | None = Field(default=None, max_length=45)
     status: str | None = Field(default=None, max_length=10)
+    user_device_asignment_id: int | None = None
     location: str | None = Field(
         default=None,
         max_length=255,

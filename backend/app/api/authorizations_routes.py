@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -12,16 +12,29 @@ router = APIRouter(prefix="/authorizations", tags=["authorizations"])
 
 @router.get("", response_model=list[AuthorizationPublic])
 def list_authorizations(
-    user_id: int,
+    user_id: int | None = Query(None),
+    device_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[AuthorizationPublic]:
-    rows = (
-        db.query(DeviceAuthorization)
-        .filter(DeviceAuthorization.user_id == user_id)
-        .order_by(DeviceAuthorization.device_id.asc())
-        .all()
-    )
+    if (user_id is None) == (device_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cần đúng một tham số: user_id hoặc device_id",
+        )
+    q = db.query(DeviceAuthorization)
+    if user_id is not None:
+        rows = (
+            q.filter(DeviceAuthorization.user_id == user_id)
+            .order_by(DeviceAuthorization.device_id.asc())
+            .all()
+        )
+    else:
+        rows = (
+            q.filter(DeviceAuthorization.device_id == device_id)
+            .order_by(DeviceAuthorization.user_id.asc())
+            .all()
+        )
     return [AuthorizationPublic.model_validate(r) for r in rows]
 
 

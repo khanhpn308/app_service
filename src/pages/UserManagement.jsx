@@ -336,6 +336,23 @@ export default function UserManagement() {
                   <p className="text-slate-500 text-xs mb-1">Ngày tạo</p>
                   <p className="text-slate-200">{u.creat_at}</p>
                 </div>
+                <div className="bg-slate-900 rounded-lg p-3 border border-slate-700 col-span-2">
+                  <p className="text-slate-500 text-xs mb-1">Thiết bị được phân quyền</p>
+                  {Array.isArray(u.authorized_devices) && u.authorized_devices.length > 0 ? (
+                    <ul className="text-slate-200 text-sm space-y-1.5 max-h-32 overflow-y-auto">
+                      {u.authorized_devices.map((d) => (
+                        <li key={d.device_id} className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="font-medium text-white">
+                            {d.devicename ?? `Thiết bị ${d.device_id}`}
+                          </span>
+                          <span className="text-slate-500 text-xs font-mono">ID {d.device_id}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-slate-500 text-sm">Chưa có thiết bị được gán</p>
+                  )}
+                </div>
               </div>
             </div>
           ))}

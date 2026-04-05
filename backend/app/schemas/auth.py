@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
+from app.schemas.authorizations import AuthorizedDeviceBrief
+
 
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=45)
@@ -46,6 +48,7 @@ class UserPublic(BaseModel):
     expired_at: date | None
     status: str
     role: str
+    authorized_devices: list[AuthorizedDeviceBrief] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

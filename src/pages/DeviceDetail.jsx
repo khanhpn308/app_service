@@ -12,9 +12,25 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ArrowLeft, Cpu, MapPin, Clock, Edit2, Eye, EyeOff, Wifi, WifiOff, Activity, Gauge, Zap, Waves } from 'lucide-react';
+import {
+  ArrowLeft,
+  Cpu,
+  MapPin,
+  Clock,
+  Edit2,
+  Eye,
+  EyeOff,
+  Wifi,
+  WifiOff,
+  Activity,
+  Gauge,
+  Zap,
+  Waves,
+  Users,
+} from 'lucide-react';
 import { mockDevices, generateDeviceHistory } from '../data/mockData';
 import { apiFetch } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 
 const WS_BASE = import.meta.env.VITE_WS_URL ?? '';
@@ -36,6 +52,15 @@ function mapApiDeviceToUi(d) {
   };
 }
 
+/** ISO date → dd/mm/yyyy */
+function isoDateToDisplay(iso) {
+  if (!iso) return '—';
+  const s = String(iso).slice(0, 10);
+  const [y, m, d] = s.split('-');
+  if (!y || !m || !d) return '—';
+  return `${d}/${m}/${y}`;
+}
+
 function formatTime(ts) {
   try {
     return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -52,11 +77,18 @@ function capPush(arr, item, max = 80) {
 const DeviceDetail = () => {
   const { deviceId } = useParams();
   const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
   const [device, setDevice] = useState(null);
+  /** Payload API gốc (authorized_users, user_device_asignment_id cho admin) */
+  const [apiDetail, setApiDetail] = useState(null);
   const [loadingDevice, setLoadingDevice] = useState(true);
   const [activeTab, setActiveTab] = useState('account');
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [assignmentId, setAssignmentId] = useState('');
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentError, setAssignmentError] = useState('');
+  const [assignmentOk, setAssignmentOk] = useState(false);
   const [realtimeSeries, setRealtimeSeries] = useState([]);
   const [vibrationBar, setVibrationBar] = useState([{ name: 'Vibration', value: 0 }]);
   const wsRef = useRef(null);
@@ -67,12 +99,24 @@ const DeviceDetail = () => {
     const load = async () => {
       if (!deviceId) return;
       setLoadingDevice(true);
+      setApiDetail(null);
       try {
         const data = await apiFetch(`/api/devices/${encodeURIComponent(deviceId)}`);
-        if (!cancelled) setDevice(mapApiDeviceToUi(data));
+        if (!cancelled) {
+          setApiDetail(data);
+          setDevice(mapApiDeviceToUi(data));
+          if (user?.role === 'admin' && data && data.user_device_asignment_id != null) {
+            setAssignmentId(String(data.user_device_asignment_id));
+          } else {
+            setAssignmentId('');
+          }
+        }
       } catch {
         const mock = mockDevices.find((d) => String(d.id) === String(deviceId));
-        if (!cancelled) setDevice(mock ?? null);
+        if (!cancelled) {
+          setDevice(mock ?? null);
+          setApiDetail(null);
+        }
       } finally {
         if (!cancelled) setLoadingDevice(false);
       }
@@ -81,7 +125,7 @@ const DeviceDetail = () => {
     return () => {
       cancelled = true;
     };
-  }, [deviceId]);
+  }, [deviceId, user?.role]);
 
   const history = generateDeviceHistory(device?.id ?? deviceId);
 
@@ -370,6 +414,102 @@ const DeviceDetail = () => {
                   </div>
                 </div>
               </div>
+
+              {/* User được phân quyền RBAC — mọi người có quyền xem chi tiết đều thấy */}
+              {apiDetail && Array.isArray(apiDetail.authorized_users) && (
+                <div className="bg-slate-900 rounded-lg p-6 border border-slate-700">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Users className="h-5 w-5 text-cyan-400" />
+                    <h3 className="text-lg font-semibold text-white">Người được phân quyền truy cập</h3>
+                  </div>
+                  {apiDetail.authorized_users.length === 0 ? (
+                    <p className="text-slate-500 text-sm">Chưa có user nào được gán quyền (RBAC).</p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {apiDetail.authorized_users.map((u) => (
+                        <li
+                          key={u.user_id}
+                          className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-800 pb-3 last:border-0 last:pb-0"
+                        >
+                          <div>
+                            <p className="text-white font-medium">{u.fullname}</p>
+                            <p className="text-slate-500 text-sm">
+                              @{u.username} · ID <span className="font-mono text-slate-400">{u.user_id}</span>
+                            </p>
+                          </div>
+                          <p className="text-slate-400 text-xs shrink-0">
+                            Hết hạn quyền:{' '}
+                            <span className="text-slate-300">{isoDateToDisplay(u.expired_at)}</span>
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {/* Gán tài khoản legacy (cột user_device_asignment_id) — chỉ admin */}
+              {isAdmin() && apiDetail && (
+                <div className="bg-slate-900 rounded-lg p-6 border border-amber-900/40">
+                  <h3 className="text-lg font-semibold text-white mb-1">Gán tài khoản (legacy)</h3>
+                  <p className="text-slate-500 text-sm mb-4">
+                    Trường <span className="font-mono text-slate-400">user_device_asignment_id</span> trên bản ghi
+                    thiết bị. Chỉ admin xem và chỉnh sửa.
+                  </p>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const n = parseInt(String(assignmentId).trim(), 10);
+                      setAssignmentError('');
+                      setAssignmentOk(false);
+                      if (Number.isNaN(n) || n < 0) {
+                        setAssignmentError('Nhập số nguyên không âm (ID user gán thiết bị).');
+                        return;
+                      }
+                      setAssignmentSaving(true);
+                      apiFetch(`/api/devices/${encodeURIComponent(deviceId)}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ user_device_asignment_id: n }),
+                      })
+                        .then(() => {
+                          setApiDetail((prev) =>
+                            prev ? { ...prev, user_device_asignment_id: n } : prev
+                          );
+                          setAssignmentOk(true);
+                        })
+                        .catch((err) => {
+                          setAssignmentError(err.message || 'Lưu thất bại');
+                        })
+                        .finally(() => setAssignmentSaving(false));
+                    }}
+                    className="flex flex-col sm:flex-row gap-3 sm:items-end"
+                  >
+                    <div className="flex-1">
+                      <label className="block text-slate-400 text-sm mb-2">User ID gán thiết bị</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={assignmentId}
+                        onChange={(e) => setAssignmentId(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-white font-mono"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={assignmentSaving}
+                      className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50"
+                    >
+                      {assignmentSaving ? 'Đang lưu...' : 'Lưu'}
+                    </button>
+                  </form>
+                  {assignmentError && (
+                    <p className="text-red-400 text-sm mt-2">{assignmentError}</p>
+                  )}
+                  {assignmentOk && !assignmentError && (
+                    <p className="text-emerald-400 text-sm mt-2">Đã cập nhật.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

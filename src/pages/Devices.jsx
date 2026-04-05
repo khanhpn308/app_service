@@ -1,19 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Cpu, MapPin, Clock, ExternalLink, Plus, Search } from 'lucide-react';
+import { Cpu, MapPin, Clock, ExternalLink, Plus, Search, Trash2 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { mockDevices } from '../data/mockData';
 import AddDeviceModal from '../components/AddDeviceModal';
 
 const Devices = () => {
   const navigate = useNavigate();
-  const { isAdmin, user } = useAuth();
+  const { isAdmin } = useAuth();
   const [devices, setDevices] = useState(mockDevices);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -57,6 +61,29 @@ const Devices = () => {
     // Optimistically append created device; next page refresh will sync from API.
     setDevices((prev) => [...prev, newDevice]);
     setShowAddModal(false);
+  };
+
+  const handleDeleteDevice = async () => {
+    if (deleteConfirm !== 'OK') {
+      setDeleteError('Nhập chính xác OK (chữ in hoa)');
+      return;
+    }
+    const rawId = deleteTarget?.device_id ?? deleteTarget?.id;
+    if (rawId == null) return;
+    setDeleteError('');
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/devices/${encodeURIComponent(rawId)}`, { method: 'DELETE' });
+      setDeleteTarget(null);
+      setDeleteConfirm('');
+      setDevices((prev) =>
+        prev.filter((d) => String(d.device_id ?? d.id) !== String(rawId))
+      );
+    } catch (err) {
+      setDeleteError(err.message || 'Xóa thiết bị thất bại');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const normalizedDevices = useMemo(() => {
@@ -105,14 +132,31 @@ const Devices = () => {
             </div>
           </div>
           
-          <Link
-            to={`/devices/${device.id}`}
-            className="p-2 hover:bg-slate-700 rounded-lg transition-colors duration-200"
-            title="View Detail"
-            aria-label={`View detail ${device.id}`}
-          >
-            <ExternalLink className="h-5 w-5 text-slate-400 hover:text-blue-400" />
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link
+              to={`/devices/${device.id}`}
+              className="p-2 hover:bg-slate-700 rounded-lg transition-colors duration-200"
+              title="View Detail"
+              aria-label={`View detail ${device.id}`}
+            >
+              <ExternalLink className="h-5 w-5 text-slate-400 hover:text-blue-400" />
+            </Link>
+            {isAdmin() && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(device);
+                  setDeleteConfirm('');
+                  setDeleteError('');
+                }}
+                className="p-2 hover:bg-red-900/40 rounded-lg transition-colors duration-200"
+                title="Xóa thiết bị"
+                aria-label={`Xóa thiết bị ${device.id}`}
+              >
+                <Trash2 className="h-5 w-5 text-red-400 hover:text-red-300" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Device ID */}
@@ -243,6 +287,55 @@ const Devices = () => {
           onClose={() => setShowAddModal(false)}
           onAdd={handleAddDevice}
         />
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-slate-800 border border-red-900/50 rounded-xl max-w-md w-full shadow-2xl p-6">
+            <h3 className="text-lg font-bold text-white mb-2">Xác nhận xóa thiết bị</h3>
+            <p className="text-slate-300 text-sm mb-4">
+              Thao tác này xóa thiết bị và các bản ghi phân quyền liên quan. Không thể hoàn tác.
+            </p>
+            <ul className="text-slate-200 text-sm mb-4 space-y-1 list-disc list-inside">
+              <li>
+                <span className="text-slate-400">Tên:</span>{' '}
+                {deleteTarget.name ?? deleteTarget.devicename ?? '—'}
+              </li>
+              <li>
+                <span className="text-slate-400">Device ID:</span>{' '}
+                {deleteTarget.device_id ?? deleteTarget.id}
+              </li>
+            </ul>
+            <p className="text-amber-200/90 text-xs mb-3">
+              Nhập <strong className="text-white">OK</strong> (chữ in hoa) để xác nhận.
+            </p>
+            <input
+              type="text"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder="OK"
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white mb-3 font-mono"
+            />
+            {deleteError && <p className="text-red-400 text-sm mb-3">{deleteError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteDevice}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+              >
+                {deleting ? 'Đang xóa...' : 'Xóa thiết bị'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

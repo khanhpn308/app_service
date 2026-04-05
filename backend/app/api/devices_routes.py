@@ -9,7 +9,13 @@ from app.core.deps import get_current_user, get_db, require_admin
 from app.models.device import Device
 from app.models.device_authorization import DeviceAuthorization
 from app.models.user import User
-from app.schemas.devices import DeviceCreate, DeviceDetailPublic, DevicePublic, DeviceUpdate
+from app.schemas.devices import (
+    DeviceAuthorizedUser,
+    DeviceCreate,
+    DeviceDetailPublic,
+    DevicePublic,
+    DeviceUpdate,
+)
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -85,6 +91,22 @@ def list_devices_for_current_user(
     return [DevicePublic.model_validate(r) for r in rows]
 
 
+@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> None:
+    row = db.query(Device).filter(Device.device_id == device_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    db.query(DeviceAuthorization).filter(DeviceAuthorization.device_id == device_id).delete(
+        synchronize_session=False
+    )
+    db.delete(row)
+    db.commit()
+
+
 @router.get("/{device_id}", response_model=DeviceDetailPublic)
 def get_device(
     device_id: int,
@@ -111,4 +133,27 @@ def get_device(
         if auth.expired_at is not None and auth.expired_at < today:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
-    return DeviceDetailPublic.model_validate(row)
+    auth_rows = (
+        db.query(DeviceAuthorization, User)
+        .join(User, User.user_id == DeviceAuthorization.user_id)
+        .filter(DeviceAuthorization.device_id == device_id)
+        .order_by(User.user_id.asc())
+        .all()
+    )
+    authorized_users = [
+        DeviceAuthorizedUser(
+            user_id=u.user_id,
+            username=u.username,
+            fullname=u.fullname,
+            expired_at=a.expired_at,
+        )
+        for a, u in auth_rows
+    ]
+
+    detail = DeviceDetailPublic.model_validate(row)
+    return detail.model_copy(
+        update={
+            "authorized_users": authorized_users,
+            "user_device_asignment_id": row.user_device_asignment_id if user.role == "admin" else None,
+        }
+    )
