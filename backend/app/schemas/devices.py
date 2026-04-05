@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
@@ -52,7 +54,7 @@ class DeviceDetailPublic(BaseModel):
     location: str | None = None
     device_type: str | None = None
     user_device_asignment_id: int | None = None
-    authorized_users: list[DeviceAuthorizedUser] = []
+    authorized_users: list[DeviceAuthorizedUser] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
