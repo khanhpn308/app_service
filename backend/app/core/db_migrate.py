@@ -89,3 +89,38 @@ def ensure_device_authorization_granted_by_varchar(engine: Engine) -> None:
             conn.execute(
                 text("ALTER TABLE `device_authorization` MODIFY `granted_by` VARCHAR(45) NULL")
             )
+
+
+def ensure_device_ui_columns(engine: Engine) -> None:
+    """Add location / telemetry display columns used by the web UI (persisted across reloads)."""
+    alters = [
+        ("location", "ALTER TABLE `device` ADD COLUMN `location` VARCHAR(255) NULL"),
+        ("device_type", "ALTER TABLE `device` ADD COLUMN `device_type` VARCHAR(45) NULL"),
+        (
+            "last_reading_at",
+            "ALTER TABLE `device` ADD COLUMN `last_reading_at` DATETIME(6) NULL",
+        ),
+        (
+            "last_reading_value",
+            "ALTER TABLE `device` ADD COLUMN `last_reading_value` DECIMAL(12, 4) NULL",
+        ),
+        (
+            "last_reading_unit",
+            "ALTER TABLE `device` ADD COLUMN `last_reading_unit` VARCHAR(32) NULL",
+        ),
+    ]
+    with engine.begin() as conn:
+        for col_name, ddl in alters:
+            r = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'device'
+                      AND COLUMN_NAME = :col
+                    """
+                ),
+                {"col": col_name},
+            )
+            if (r.scalar() or 0) == 0:
+                conn.execute(text(ddl))

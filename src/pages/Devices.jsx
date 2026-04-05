@@ -6,6 +6,25 @@ import { apiFetch } from '../lib/api';
 import { mockDevices } from '../data/mockData';
 import AddDeviceModal from '../components/AddDeviceModal';
 
+/** ISO datetime from API → short relative label for list cards */
+function formatRelativeTime(iso) {
+  if (!iso) return '—';
+  try {
+    const t = new Date(iso);
+    if (Number.isNaN(t.getTime())) return '—';
+    const sec = Math.floor((Date.now() - t.getTime()) / 1000);
+    if (sec < 15) return 'Just now';
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min} min ago`;
+    const h = Math.floor(min / 60);
+    if (h < 48) return `${h} hours ago`;
+    return t.toLocaleString();
+  } catch {
+    return '—';
+  }
+}
+
 const Devices = () => {
   const navigate = useNavigate();
   const { isAdmin, user } = useAuth();
@@ -62,15 +81,21 @@ const Devices = () => {
   const normalizedDevices = useMemo(() => {
     // Normalize data shape between mock and API:
     // - mock uses { id, name, type, location, ... }
-    // - DB schema uses { device_id, devicename, status }
+    // - API returns { device_id, devicename, status, location, last_reading_at, ... }
     return devices.map((d) => {
       const id = d.id ?? d.device_id;
       const name = d.name ?? d.devicename ?? `Device ${id}`;
-      const type = d.type ?? 'Motor';
+      const type = d.device_type ?? d.type ?? 'Motor';
       const location = d.location ?? '—';
-      const lastUpdate = d.lastUpdate ?? '—';
-      const value = d.value ?? '—';
-      const unit = d.unit ?? '';
+      const lastUpdate =
+        d.last_reading_at != null && d.last_reading_at !== ''
+          ? formatRelativeTime(d.last_reading_at)
+          : (d.lastUpdate ?? '—');
+      const value =
+        d.last_reading_value != null && d.last_reading_value !== ''
+          ? d.last_reading_value
+          : (d.value ?? '—');
+      const unit = d.last_reading_unit ?? d.unit ?? '';
       return { ...d, id: String(id), name, type, location, lastUpdate, value, unit };
     });
   }, [devices]);

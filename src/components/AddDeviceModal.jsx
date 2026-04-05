@@ -60,6 +60,15 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
       try {
         // DB schema: device_id (INT), devicename (VARCHAR), password, status, user_device_asignment_id (NOT NULL)
         const deviceId = Math.floor(Date.now() % 1000000);
+        const unit =
+          formData.type === 'Temperature'
+            ? '°C'
+            : formData.type === 'Humidity'
+              ? '%'
+              : formData.type === 'Lighting'
+                ? '%'
+                : 'units';
+
         const created = await apiFetch('/api/devices', {
           method: 'POST',
           body: JSON.stringify({
@@ -68,6 +77,10 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
             password: formData.password,
             status: 'active',
             user_device_asignment_id: 0,
+            location: formData.location,
+            device_type: formData.type,
+            last_reading_value: 0,
+            last_reading_unit: unit,
           }),
         });
 
@@ -76,19 +89,15 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
           device_id: created?.device_id ?? deviceId,
           devicename: created?.devicename ?? formData.name,
           status: created?.status ?? 'active',
-          // UI-only extras (not stored in DB currently)
+          device_type: created?.device_type ?? formData.type,
+          location: created?.location ?? formData.location,
+          last_reading_at: created?.last_reading_at,
+          last_reading_value: created?.last_reading_value ?? 0,
+          last_reading_unit: created?.last_reading_unit ?? unit,
           type: formData.type,
-          location: formData.location,
           lastUpdate: 'Just now',
-          value: 0,
-          unit:
-            formData.type === 'Temperature'
-              ? '°C'
-              : formData.type === 'Humidity'
-                ? '%'
-                : formData.type === 'Lighting'
-                  ? '%'
-                  : 'units',
+          value: created?.last_reading_value ?? 0,
+          unit,
         });
       } catch (err) {
         setSubmitError(err.message || 'Add device failed');

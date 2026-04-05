@@ -1,4 +1,7 @@
-from pydantic import BaseModel
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, Field
 
 
 class DeviceCreate(BaseModel):
@@ -7,12 +10,22 @@ class DeviceCreate(BaseModel):
     password: str | None = None
     status: str | None = None
     user_device_asignment_id: int
+    location: str | None = Field(default=None, max_length=255)
+    device_type: str | None = Field(default=None, max_length=45)
+    last_reading_value: Decimal | float | int | None = None
+    last_reading_unit: str | None = Field(default=None, max_length=32)
+    last_reading_at: datetime | None = None
 
 
 class DevicePublic(BaseModel):
     device_id: int
     devicename: str | None = None
     status: str | None = None
+    location: str | None = None
+    device_type: str | None = None
+    last_reading_at: datetime | None = None
+    last_reading_value: Decimal | None = None
+    last_reading_unit: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -24,6 +37,11 @@ class DeviceDetailPublic(BaseModel):
     devicename: str | None = None
     status: str | None = None
     password: str | None = None
+    location: str | None = None
+    device_type: str | None = None
+    last_reading_at: datetime | None = None
+    last_reading_value: Decimal | None = None
+    last_reading_unit: str | None = None
 
     model_config = {"from_attributes": True}
 

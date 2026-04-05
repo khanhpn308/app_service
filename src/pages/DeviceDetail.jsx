@@ -23,14 +23,27 @@ const WS_BASE = import.meta.env.VITE_WS_URL ?? '';
 function mapApiDeviceToUi(d) {
   const id = String(d.device_id);
   const online = String(d.status || '').toLowerCase() === 'active';
+  let lastUpdate = '—';
+  if (d.last_reading_at) {
+    try {
+      const t = new Date(d.last_reading_at);
+      if (!Number.isNaN(t.getTime())) lastUpdate = t.toLocaleString();
+    } catch {
+      lastUpdate = '—';
+    }
+  }
+  let valueStr = '—';
+  if (d.last_reading_value != null && d.last_reading_value !== '') {
+    valueStr = String(d.last_reading_value);
+  }
   return {
     id,
     name: d.devicename || `Device ${id}`,
-    type: 'Motor',
-    location: '—',
-    lastUpdate: '—',
-    value: '—',
-    unit: '',
+    type: d.device_type || 'Motor',
+    location: d.location ?? '—',
+    lastUpdate,
+    value: valueStr,
+    unit: d.last_reading_unit ?? '',
     password: d.password != null && String(d.password).length > 0 ? String(d.password) : '********',
     status: online ? 'online' : 'offline',
   };

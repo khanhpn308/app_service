@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
@@ -29,12 +30,20 @@ def create_device(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> DevicePublic:
+    v = body.last_reading_value
+    if v is not None and not isinstance(v, Decimal):
+        v = Decimal(str(v))
     row = Device(
         device_id=body.device_id,
         devicename=body.devicename,
         password=body.password,
         status=body.status,
         user_device_asignment_id=body.user_device_asignment_id,
+        location=body.location,
+        device_type=body.device_type,
+        last_reading_value=v,
+        last_reading_unit=body.last_reading_unit,
+        last_reading_at=body.last_reading_at or datetime.now(),
     )
     db.add(row)
     try:
