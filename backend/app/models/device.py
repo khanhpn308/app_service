@@ -1,7 +1,4 @@
-from datetime import datetime
-from decimal import Decimal
-
-from sqlalchemy import DateTime, Integer, Numeric, String
+from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -14,10 +11,10 @@ class Device(Base):
     devicename: Mapped[str | None] = mapped_column(String(45), nullable=True)
     password: Mapped[str | None] = mapped_column(String(45), nullable=True)
     status: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    # Required by current MySQL schema (NOT NULL). Semantics unclear; keep as int.
+    # Legacy NOT NULL column from original schema (name is misspelled "asignment").
+    # Not used for RBAC: which user may access which device is in `device_authorization`.
+    # New devices typically store 0 here; keep the column for DB compatibility.
     user_device_asignment_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Static display / classification only. Live telemetry comes from MQTT/payload, not stored here.
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     device_type: Mapped[str | None] = mapped_column(String(45), nullable=True)
-    last_reading_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
-    last_reading_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
-    last_reading_unit: Mapped[str | None] = mapped_column(String(32), nullable=True)

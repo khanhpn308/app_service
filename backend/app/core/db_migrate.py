@@ -1,7 +1,11 @@
 """Lightweight schema patches for existing DB volumes (initdb scripts only run once)."""
 
+import logging
+
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_user_expired_at_column(engine: Engine) -> None:
@@ -91,36 +95,49 @@ def ensure_device_authorization_granted_by_varchar(engine: Engine) -> None:
             )
 
 
-def ensure_device_ui_columns(engine: Engine) -> None:
-    """Add location / telemetry display columns used by the web UI (persisted across reloads)."""
-    alters = [
-        ("location", "ALTER TABLE `device` ADD COLUMN `location` VARCHAR(255) NULL"),
-        ("device_type", "ALTER TABLE `device` ADD COLUMN `device_type` VARCHAR(45) NULL"),
-        (
-            "last_reading_at",
-            "ALTER TABLE `device` ADD COLUMN `last_reading_at` DATETIME(6) NULL",
-        ),
-        (
-            "last_reading_value",
-            "ALTER TABLE `device` ADD COLUMN `last_reading_value` DECIMAL(12, 4) NULL",
-        ),
-        (
-            "last_reading_unit",
-            "ALTER TABLE `device` ADD COLUMN `last_reading_unit` VARCHAR(32) NULL",
-        ),
-    ]
+def ensure_device_drop_last_reading_columns(engine: Engine) -> None:
+    """Remove dynamic telemetry columns if present (live data comes from MQTT/payload, not DB)."""
+    to_drop = ("last_reading_unit", "last_reading_value", "last_reading_at")
     with engine.begin() as conn:
-        for col_name, ddl in alters:
+        for col_name in to_drop:
             r = conn.execute(
                 text(
-                    """
+                    f"""
                     SELECT COUNT(*) FROM information_schema.COLUMNS
                     WHERE TABLE_SCHEMA = DATABASE()
                       AND TABLE_NAME = 'device'
-                      AND COLUMN_NAME = :col
+                      AND COLUMN_NAME = '{col_name}'
                     """
-                ),
-                {"col": col_name},
+                )
+            )
+            if (r.scalar() or 0) > 0:
+                conn.execute(text(f"ALTER TABLE `device` DROP COLUMN `{col_name}`"))
+                logger.info("db_migrate: dropped device.%s", col_name)
+    logger.info("db_migrate: ensure_device_drop_last_reading_columns OK")
+
+
+def ensure_device_ui_columns(engine: Engine) -> None:
+    """Add static UI columns on device (location, device_type)."""
+    alters = [
+        ("location", "ALTER TABLE `device` ADD COLUMN `location` VARCHAR(255) NULL"),
+        ("device_type", "ALTER TABLE `device` ADD COLUMN `device_type` VARCHAR(45) NULL"),
+    ]
+    with engine.begin() as conn:
+        for col_name, ddl in alters:
+            # Literal column name from fixed list only (avoids driver quirks with :named binds in some setups).
+            r = conn.execute(
+                text(
+                    f"""
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'device'
+                      AND COLUMN_NAME = '{col_name}'
+                    """
+                )
             )
             if (r.scalar() or 0) == 0:
                 conn.execute(text(ddl))
+                logger.info("db_migrate: added device.%s", col_name)
+            else:
+                logger.debug("db_migrate: device.%s already present", col_name)
+    logger.info("db_migrate: ensure_device_ui_columns OK")

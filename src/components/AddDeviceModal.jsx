@@ -79,24 +79,19 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
             user_device_asignment_id: 0,
             location: formData.location,
             device_type: formData.type,
-            last_reading_value: 0,
-            last_reading_unit: unit,
           }),
         });
 
-        // Keep existing UI shape via onAdd
+        // Keep existing UI shape via onAdd (readings filled from live payload later, not DB)
         onAdd({
           device_id: created?.device_id ?? deviceId,
           devicename: created?.devicename ?? formData.name,
           status: created?.status ?? 'active',
           device_type: created?.device_type ?? formData.type,
           location: created?.location ?? formData.location,
-          last_reading_at: created?.last_reading_at,
-          last_reading_value: created?.last_reading_value ?? 0,
-          last_reading_unit: created?.last_reading_unit ?? unit,
           type: formData.type,
-          lastUpdate: 'Just now',
-          value: created?.last_reading_value ?? 0,
+          lastUpdate: '—',
+          value: '—',
           unit,
         });
       } catch (err) {

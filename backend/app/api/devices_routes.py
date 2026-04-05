@@ -1,5 +1,4 @@
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
@@ -10,7 +9,7 @@ from app.core.deps import get_current_user, get_db, require_admin
 from app.models.device import Device
 from app.models.device_authorization import DeviceAuthorization
 from app.models.user import User
-from app.schemas.devices import DeviceCreate, DeviceDetailPublic, DevicePublic
+from app.schemas.devices import DeviceCreate, DeviceDetailPublic, DevicePublic, DeviceUpdate
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -30,9 +29,6 @@ def create_device(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> DevicePublic:
-    v = body.last_reading_value
-    if v is not None and not isinstance(v, Decimal):
-        v = Decimal(str(v))
     row = Device(
         device_id=body.device_id,
         devicename=body.devicename,
@@ -41,9 +37,6 @@ def create_device(
         user_device_asignment_id=body.user_device_asignment_id,
         location=body.location,
         device_type=body.device_type,
-        last_reading_value=v,
-        last_reading_unit=body.last_reading_unit,
-        last_reading_at=body.last_reading_at or datetime.now(),
     )
     db.add(row)
     try:
@@ -51,6 +44,26 @@ def create_device(
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Device already exists")
+    db.refresh(row)
+    return DevicePublic.model_validate(row)
+
+
+@router.patch("/{device_id}", response_model=DevicePublic)
+def patch_device(
+    device_id: int,
+    body: DeviceUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> DevicePublic:
+    row = db.query(Device).filter(Device.device_id == device_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    data = body.model_dump(exclude_unset=True)
+    for key, val in data.items():
+        setattr(row, key, val)
+
+    db.commit()
     db.refresh(row)
     return DevicePublic.model_validate(row)
 
@@ -99,4 +112,3 @@ def get_device(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
     return DeviceDetailPublic.model_validate(row)
-

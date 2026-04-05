@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal, engine
 from app.core.db_migrate import (
     ensure_device_authorization_granted_by_varchar,
+    ensure_device_drop_last_reading_columns,
     ensure_device_ui_columns,
     ensure_device_user_device_asignment_id_column,
     ensure_user_expired_at_column,
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_user_expired_at_column(engine)
     ensure_device_user_device_asignment_id_column(engine)
+    ensure_device_drop_last_reading_columns(engine)
     ensure_device_ui_columns(engine)
     ensure_device_authorization_granted_by_varchar(engine)
     with SessionLocal() as db:
