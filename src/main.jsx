@@ -1,3 +1,9 @@
+/**
+ * Điểm vào SPA (Single Page Application) — mount React vào `#root`.
+ *
+ * - `StrictMode`: gọi effect hai lần ở dev để phát hiện side-effect (React 18).
+ * - Import `global.css`: token Tailwind / style toàn cục.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
@@ -10,4 +16,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>
 );
-

@@ -1,8 +1,27 @@
+"""
+Cấu hình tập trung (đọc từ biến môi trường và file ``.env``).
+
+Thư viện: **Pydantic Settings** — validate kiểu và tên biến. Instance singleton ``settings`` dùng xuyên suốt app.
+
+Viết tắt:
+    - **JWT**: JSON Web Token — cấu hình ``jwt_*`` (secret không commit lên git).
+    - **MQTT**: broker IoT — ``mqtt_*`` cho subscriber nền.
+
+Lưu ý ``settings_customise_sources``: thứ tự nguồn cấu hình được sắp để **biến môi trường container**
+ghi đè ``.env`` khi deploy (Docker/K8s).
+"""
+
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
+    """
+    Một class = một bộ cấu hình runtime.
+
+    Thuộc tính viết ``snake_case`` khớp tên biến môi trường (không phân biệt hoa thường theo quy ước Pydantic v2).
+    """
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -18,8 +37,7 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # Later sources override earlier ones. Dotenv must not beat Docker env; env must also
-        # beat optional secret files (file_secret last in default tuple would override env).
+        # Nguồn sau ghi đè nguồn trước. .env không được thắng env Docker; env phải thắng file secret mặc định.
         return (
             init_settings,
             dotenv_settings,
@@ -40,7 +58,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7
 
-    # MQTT subscriber (Mosquitto)
+    # MQTT subscriber (ví dụ Mosquitto)
     mqtt_enabled: bool = True
     mqtt_host: str = "localhost"
     mqtt_port: int = 1883
@@ -48,13 +66,17 @@ class Settings(BaseSettings):
     mqtt_password: str | None = None
     mqtt_client_id: str = "iot-backend-subscriber"
     mqtt_keepalive: int = 60
-    # Comma-separated list; you will edit later
-    mqtt_topics: str = "test/topic1,test/topic2"
+    mqtt_topics: str = "test/topic1,test/topic2"  # Danh sách phân tách dấu phẩy
     mqtt_qos: int = 0
     mqtt_max_messages: int = 500
 
     @property
     def database_url(self) -> str:
+        """
+        Chuỗi DSN SQLAlchemy cho driver ``mysql+pymysql``.
+
+        Dùng khi cần URL dạng text; kết nối thực tế trong ``db.py`` có thể dùng ``creator`` PyMySQL trực tiếp.
+        """
         return str(
             URL.create(
                 "mysql+pymysql",
@@ -68,4 +90,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

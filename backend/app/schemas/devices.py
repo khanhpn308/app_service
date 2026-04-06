@@ -1,3 +1,9 @@
+"""
+Schema Pydantic cho thiết bị: tạo, public list, chi tiết (kèm user được phân quyền).
+
+``AliasChoices`` cho phép client gửi ``type`` / ``deviceType`` thay cho ``device_type`` — tương thích frontend cũ.
+"""
+
 from datetime import date
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field

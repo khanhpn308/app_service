@@ -1,4 +1,8 @@
-"""Deactivate users whose account period has ended (remaining days <= 0)."""
+"""
+Đồng bộ trạng thái tài khoản theo ngày: user có ``expired_at`` ≤ hôm nay → ``status = deactive``.
+
+Gọi từ login và một số endpoint đọc user để giảm trường hợp token còn hạn nhưng tài khoản đã quá hạn theo lịch.
+"""
 
 from datetime import date
 
@@ -8,7 +12,11 @@ from app.models.user import User
 
 
 def deactivate_expired_users(db: Session) -> None:
-    """Set status to deactive when today >= expired_at (remaining calendar days <= 0)."""
+    """
+    Duyệt user đang ``active``; nếu ``expired_at`` không null và còn ≤ 0 ngày so với hôm nay thì chuyển ``deactive``.
+
+    Commit một lần nếu có thay đổi.
+    """
     today = date.today()
     rows = db.query(User).filter(User.status == "active").all()
     changed = False

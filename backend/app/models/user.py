@@ -1,3 +1,17 @@
+"""
+Model ORM: bảng MySQL ``user`` (tên trùng từ khóa SQL nên trong DB thường quote).
+
+Cột quan trọng:
+    - **user_id**: khóa chính.
+    - **username**: đăng nhập, map JWT ``sub``.
+    - **password**: bcrypt hash (cần VARCHAR đủ dài, ví dụ 255).
+    - **cccd**: số định danh 12 chữ số (kiểu Numeric trong DB).
+    - **expired_at / status**: hết hạn tài khoản — đồng bộ với ``user_expiry.deactivate_expired_users``.
+    - **role**: ``admin`` hoặc ``user`` (RBAC đơn giản).
+
+Lưu ý: ``creat_at`` là tên cột lịch sử (typo *creat* thay vì *created*).
+"""
+
 from datetime import date
 
 from sqlalchemy import Date, Integer, Numeric, String
@@ -7,7 +21,7 @@ from app.models.base import Base
 
 
 class User(Base):
-    """Maps to MySQL table `user` (quoted name)."""
+    """Ánh xạ bảng ``user`` — người dùng hệ thống."""
 
     __tablename__ = "user"
 

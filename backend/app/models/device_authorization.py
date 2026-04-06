@@ -1,3 +1,12 @@
+"""
+Model ORM: bảng ``device_authorization`` — quan hệ nhiều-nhiều User ↔ Device.
+
+Khóa chính ghép (**device_id**, **user_id**).
+
+- **granted_at / granted_by**: audit — ai cấp quyền, khi nào (``granted_by`` là chuỗi, ví dụ username admin).
+- **expired_at**: hết hạn quyền trên thiết bị (khác với ``user.expired_at`` — hết hạn tài khoản).
+"""
+
 from datetime import date
 
 from sqlalchemy import Date, ForeignKey, Integer, String
@@ -7,6 +16,8 @@ from app.models.base import Base
 
 
 class DeviceAuthorization(Base):
+    """Một dòng = user ``user_id`` được phép truy cập thiết bị ``device_id`` trong khoảng thời gian."""
+
     __tablename__ = "device_authorization"
 
     device_id: Mapped[int] = mapped_column(

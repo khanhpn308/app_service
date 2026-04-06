@@ -18,6 +18,8 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+    networks:
+      - iot-net
 
   frontend:
     build:
@@ -27,3 +29,9 @@ services:
       - "${FRONTEND_HTTP_PORT:-80}:80"
     depends_on:
       - backend
+    networks:
+      - iot-net
+
+networks:
+  iot-net:
+    external: true

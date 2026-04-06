@@ -1,3 +1,16 @@
+"""
+Điểm vào ứng dụng FastAPI (ASGI).
+
+Vai trò:
+    - Đăng ký middleware CORS (cho phép frontend React gọi API cross-origin).
+    - Gắn toàn bộ REST API dưới tiền tố ``/api`` (xem ``api/router.py``).
+    - ``lifespan``: trước khi nhận request — chờ MySQL, tạo/bổ sung schema, seed dữ liệu mặc định,
+      khởi chạy MQTT subscriber; khi tắt process — dừng subscriber.
+
+Tên ``main`` / ``create_app``: quy ước phổ biến trong FastAPI/Flask — module chứa factory ``create_app()`` và
+instance ``app`` dùng cho uvicorn: ``uvicorn app.main:app``.
+"""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -17,7 +30,7 @@ from app.core.db_wait import wait_for_db
 from app.core.mqtt_subscriber import MqttSubscriber
 from app.core.seed import ensure_default_admin, ensure_default_devices
 from app.core.user_expiry import deactivate_expired_users
-from app.models import device  # noqa: F401
+from app.models import device  # noqa: F401 — đăng ký model với metadata
 from app.models import device_authorization  # noqa: F401
 from app.models import user  # noqa: F401
 from app.models.base import Base
@@ -25,6 +38,19 @@ from app.models.base import Base
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Hook vòng đời ứng dụng (startup / shutdown).
+
+    Startup:
+        1. ``wait_for_db`` — tránh lỗi race khi container DB chưa sẵn sàng.
+        2. ``Base.metadata.create_all`` — tạo bảng thiếu theo ORM.
+        3. Các hàm ``ensure_*`` trong ``db_migrate`` — ALTER nhẹ cho DB cũ (volume đã tồn tại).
+        4. Seed admin/thiết bị mặc định; vô hiệu hóa user hết hạn.
+        5. MQTT: ``MqttSubscriber.start()``; lưu instance vào ``app.state.mqtt`` cho route debug.
+
+    Shutdown:
+        Dừng vòng lặp MQTT (bỏ qua lỗi nếu broker đã ngắt).
+    """
     await wait_for_db()
     Base.metadata.create_all(bind=engine)
     ensure_user_expired_at_column(engine)
@@ -54,11 +80,17 @@ async def lifespan(app: FastAPI):
     yield
     try:
         mqtt_sub.stop()
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 — shutdown: không crash process
         pass
 
 
 def create_app() -> FastAPI:
+    """
+    Factory tạo instance FastAPI (dễ test hoặc tạo nhiều app).
+
+    Returns:
+        Ứng dụng đã gắn CORS và ``api_router`` prefix ``/api``.
+    """
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
     origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
@@ -75,4 +107,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

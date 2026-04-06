@@ -1,8 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Legend,
   Line,
@@ -24,6 +22,8 @@ import {
   WifiOff,
   Activity,
   Gauge,
+  Maximize2,
+  Minimize2,
   Zap,
   Waves,
   Users,
@@ -35,14 +35,41 @@ import ChangePasswordModal from '../components/ChangePasswordModal';
 
 const WS_BASE = import.meta.env.VITE_WS_URL ?? '';
 
+function normalizeDeviceType(type) {
+  const t = String(type || '').trim().toLowerCase();
+  if (t === 'temperature' || t.includes('nhiệt')) return 'Temperature';
+  if (t === 'power' || t.includes('công suất')) return 'Power';
+  if (t === 'vibration' || t.includes('độ rung')) return 'Vibration';
+  return 'Temperature';
+}
+
+function getDeviceMetrics(type) {
+  const normalized = normalizeDeviceType(type);
+  if (normalized === 'Power') {
+    return [
+      { key: 'voltage', title: 'Voltage (V)', lineName: 'Voltage', color: '#a855f7', icon: Zap },
+      { key: 'current', title: 'Current (A)', lineName: 'Current', color: '#3b82f6', icon: Gauge },
+    ];
+  }
+  if (normalized === 'Vibration') {
+    return [
+      { key: 'vibration', title: 'Vibration (mm/s)', lineName: 'Vibration', color: '#10b981', icon: Waves },
+    ];
+  }
+  return [
+    { key: 'temperature', title: 'Temperature (°C)', lineName: 'Temperature', color: '#ef4444', icon: Activity },
+  ];
+}
+
 /** Map API device row to the shape used by this page (previously mock-only). */
 function mapApiDeviceToUi(d) {
   const id = String(d.device_id);
   const online = String(d.status || '').toLowerCase() === 'active';
+  const normalizedType = normalizeDeviceType(d.device_type);
   return {
     id,
     name: d.devicename || `Device ${id}`,
-    type: d.device_type || 'Motor',
+    type: normalizedType,
     location: d.location ?? '—',
     lastUpdate: '—',
     value: '—',
@@ -90,7 +117,7 @@ const DeviceDetail = () => {
   const [assignmentError, setAssignmentError] = useState('');
   const [assignmentOk, setAssignmentOk] = useState(false);
   const [realtimeSeries, setRealtimeSeries] = useState([]);
-  const [vibrationBar, setVibrationBar] = useState([{ name: 'Vibration', value: 0 }]);
+  const [fullscreenMetric, setFullscreenMetric] = useState(null);
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
 
@@ -163,7 +190,7 @@ const DeviceDetail = () => {
         const current = Number(msg.current);
         const voltage = Number(msg.voltage);
         const temperature = Number(msg.temperature);
-        const vibration = Number(msg.vibration);
+        const vibration = Number(msg.vibration ?? msg.vibration_mms ?? msg.vibrationMmS);
 
         setRealtimeSeries((prev) =>
           capPush(prev, {
@@ -174,8 +201,6 @@ const DeviceDetail = () => {
             vibration: Number.isFinite(vibration) ? vibration : 0,
           })
         );
-
-        setVibrationBar([{ name: deviceId, value: Number.isFinite(vibration) ? vibration : 0 }]);
       };
 
       ws.onclose = () => {
@@ -193,6 +218,21 @@ const DeviceDetail = () => {
       if (wsRef.current) wsRef.current.close();
     };
   }, [activeTab, deviceId]);
+
+  useEffect(() => {
+    if (!fullscreenMetric) return undefined;
+    const onKeydown = (event) => {
+      if (event.key === 'Escape') setFullscreenMetric(null);
+    };
+    window.addEventListener('keydown', onKeydown);
+    return () => window.removeEventListener('keydown', onKeydown);
+  }, [fullscreenMetric]);
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard' && fullscreenMetric) {
+      setFullscreenMetric(null);
+    }
+  }, [activeTab, fullscreenMetric]);
 
   if (loadingDevice) {
     return (
@@ -222,6 +262,7 @@ const DeviceDetail = () => {
     const s = password != null ? String(password) : '';
     return '•'.repeat(Math.max(s.length, 8));
   };
+  const deviceMetrics = getDeviceMetrics(device.type);
 
   return (
     <div className="space-y-6">
@@ -571,151 +612,75 @@ const DeviceDetail = () => {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Current */}
-                <div className="bg-slate-900 rounded-xl p-6 border border-slate-700">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="p-2 bg-blue-500/20 rounded-lg">
-                      <Gauge className="h-5 w-5 text-blue-500" />
+                {deviceMetrics.map((metric) => {
+                  const Icon = metric.icon;
+                  return (
+                    <div
+                      key={metric.key}
+                      className={`bg-slate-900 rounded-xl p-6 border border-slate-700 ${
+                        fullscreenMetric === metric.key ? 'fixed inset-4 z-[80] overflow-hidden' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2 rounded-lg" style={{ backgroundColor: `${metric.color}33` }}>
+                            <Icon className="h-5 w-5" style={{ color: metric.color }} />
+                          </div>
+                          <div>
+                            <h4 className="text-white font-semibold">{metric.title}</h4>
+                            <p className="text-slate-400 text-sm">Realtime (time-series)</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFullscreenMetric((prev) => (prev === metric.key ? null : metric.key))
+                          }
+                          className="p-2 rounded-lg border border-slate-600 hover:bg-slate-700 text-slate-200"
+                          title={fullscreenMetric === metric.key ? 'Thu nho bieu do' : 'Phong to bieu do'}
+                        >
+                          {fullscreenMetric === metric.key ? (
+                            <Minimize2 className="h-4 w-4" />
+                          ) : (
+                            <Maximize2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                      <ResponsiveContainer width="100%" height={fullscreenMetric === metric.key ? 520 : 260}>
+                        <LineChart data={realtimeSeries}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis dataKey="time" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                          <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: '#1e293b',
+                              border: '1px solid #334155',
+                              borderRadius: '8px',
+                              color: '#fff',
+                            }}
+                          />
+                          <Legend />
+                          <Line
+                            type="monotone"
+                            dataKey={metric.key}
+                            name={metric.lineName}
+                            stroke={metric.color}
+                            strokeWidth={2}
+                            dot={false}
+                            isAnimationActive={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
-                    <div>
-                      <h4 className="text-white font-semibold">Current (A)</h4>
-                      <p className="text-slate-400 text-sm">Realtime</p>
-                    </div>
-                  </div>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <LineChart data={realtimeSeries}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="time" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                      <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '8px',
-                          color: '#fff',
-                        }}
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="current"
-                        name="Current"
-                        stroke="#3b82f6"
-                        strokeWidth={2}
-                        dot={false}
-                        isAnimationActive={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Voltage */}
-                <div className="bg-slate-900 rounded-xl p-6 border border-slate-700">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="p-2 bg-purple-500/20 rounded-lg">
-                      <Zap className="h-5 w-5 text-purple-500" />
-                    </div>
-                    <div>
-                      <h4 className="text-white font-semibold">Voltage (V)</h4>
-                      <p className="text-slate-400 text-sm">Realtime</p>
-                    </div>
-                  </div>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <LineChart data={realtimeSeries}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="time" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                      <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '8px',
-                          color: '#fff',
-                        }}
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="voltage"
-                        name="Voltage"
-                        stroke="#a855f7"
-                        strokeWidth={2}
-                        dot={false}
-                        isAnimationActive={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                  );
+                })}
               </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Temperature */}
-                <div className="bg-slate-900 rounded-xl p-6 border border-slate-700">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="p-2 bg-red-500/20 rounded-lg">
-                      <Activity className="h-5 w-5 text-red-500" />
-                    </div>
-                    <div>
-                      <h4 className="text-white font-semibold">Temperature (°C)</h4>
-                      <p className="text-slate-400 text-sm">Realtime</p>
-                    </div>
-                  </div>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <LineChart data={realtimeSeries}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="time" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                      <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '8px',
-                          color: '#fff',
-                        }}
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="temperature"
-                        name="Temperature"
-                        stroke="#ef4444"
-                        strokeWidth={2}
-                        dot={false}
-                        isAnimationActive={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Vibration */}
-                <div className="bg-slate-900 rounded-xl p-6 border border-slate-700">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="p-2 bg-emerald-500/20 rounded-lg">
-                      <Waves className="h-5 w-5 text-emerald-500" />
-                    </div>
-                    <div>
-                      <h4 className="text-white font-semibold">Vibration</h4>
-                      <p className="text-slate-400 text-sm">Current value</p>
-                    </div>
-                  </div>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={vibrationBar}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="name" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                      <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '8px',
-                          color: '#fff',
-                        }}
-                      />
-                      <Bar dataKey="value" fill="#10b981" radius={[6, 6, 0, 0]} isAnimationActive={false} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+              {fullscreenMetric && (
+                <div
+                  className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-[1px]"
+                  onClick={() => setFullscreenMetric(null)}
+                />
+              )}
             </div>
           )}
         </div>

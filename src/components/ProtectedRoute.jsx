@@ -1,3 +1,8 @@
+/**
+ * Route guard: chỉ render route con nếu đã đăng nhập (`user` truthy).
+ * Khi `loading` — hiển thị spinner full screen (tránh nháy redirect).
+ * Chưa login → `<Navigate to="/login" />`.
+ */
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';

@@ -1,4 +1,10 @@
-"""Ensure built-in default admin exists (requested deployment default)."""
+"""
+Seed dữ liệu khởi đầu: admin mặc định và vài thiết bị demo.
+
+Chạy từ ``main.lifespan`` sau khi schema sẵn sàng. Mật khẩu admin mặc định phải đổi sau khi vào production.
+
+Hàm ``ensure_*`` idempotent: nếu dữ liệu đã có thì thoát sớm (tránh duplicate).
+"""
 
 from datetime import date
 from decimal import Decimal
@@ -18,6 +24,7 @@ DEFAULT_ADMIN_CCCD = Decimal("888888888888")
 
 
 def ensure_default_admin(db: Session) -> None:
+    """Tạo user admin cố định nếu chưa tồn tại (bỏ qua lỗi race/IntegrityError)."""
     existing = (
         db.query(User).filter(User.username == DEFAULT_ADMIN_USERNAME).first()
     )
@@ -44,7 +51,7 @@ def ensure_default_admin(db: Session) -> None:
 
 
 def ensure_default_devices(db: Session) -> None:
-    """Seed a few devices so /devices isn't empty on first run."""
+    """Thêm vài ``device`` mẫu khi bảng đang trống; bỏ qua nếu schema lỗi thời (OperationalError)."""
     try:
         if db.query(Device).count() > 0:
             return

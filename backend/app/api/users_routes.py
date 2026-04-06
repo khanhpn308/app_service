@@ -1,3 +1,13 @@
+"""
+REST API quản lý người dùng (chủ yếu **admin**).
+
+- **GET /users**: danh sách user kèm ``authorized_devices`` (thiết bị đã gán qua ``device_authorization``).
+- **PATCH /users/{id}**: đổi ``status`` (active/deactive).
+- **DELETE /users/{id}**: xóa user (không cho xóa chính mình).
+
+``deactivate_expired_users`` được gọi trước khi liệt kê để đồng bộ hết hạn tài khoản.
+"""
+
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,6 +29,7 @@ def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[UserPublic]:
+    """Trả toàn bộ user; join authorization để điền ``authorized_devices``."""
     deactivate_expired_users(db)
     rows = db.query(User).order_by(User.user_id.asc()).all()
     pairs = (
@@ -44,6 +55,7 @@ def patch_user_status(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> UserPublic:
+    """Cập nhật trạng thái tài khoản (active/deactive)."""
     target = db.query(User).filter(User.user_id == user_id).first()
     if target is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
@@ -60,6 +72,7 @@ def delete_user(
     db: Session = Depends(get_db),
     current: User = Depends(require_admin),
 ) -> None:
+    """Xóa user theo khóa; chặn xóa tài khoản đang đăng nhập."""
     if user_id == current.user_id:
         raise HTTPException(status_code=400, detail="Không thể xóa chính tài khoản đang đăng nhập")
     target = db.query(User).filter(User.user_id == user_id).first()

@@ -1,3 +1,17 @@
+"""
+MQTT subscriber nền (thư viện **paho-mqtt**): kết nối broker, subscribe topic, buffer tin trong RAM.
+
+Mục đích:
+    - Nhận message telemetry / sự kiện từ thiết bị qua broker (ví dụ Mosquitto).
+    - Lưu vòng tròn (deque) để API ``/api/mqtt/messages`` xem lại gần đây — **không** thay cho DB lịch sử dài hạn.
+
+Viết tắt:
+    - **QoS**: Quality of Service (0, 1, 2) — mức đảm bảo giao tin MQTT.
+    - **topics_csv**: danh sách topic phân tách dấu phẩy trong cấu hình.
+
+Luồng: ``loop_start()`` chạy thread nền; callback ``on_message`` chuẩn hóa JSON nếu được.
+"""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +26,8 @@ import paho.mqtt.client as mqtt
 
 @dataclass(frozen=True)
 class MqttMessage:
+    """Một tin đã nhận (bất biến) — lưu trong buffer vòng tròn."""
+
     topic: str
     payload: str
     qos: int
@@ -20,10 +36,17 @@ class MqttMessage:
 
 
 def _parse_topics(topics_csv: str) -> list[str]:
+    """Tách chuỗi cấu hình thành danh sách topic không rỗng."""
     return [t.strip() for t in (topics_csv or "").split(",") if t.strip()]
 
 
 class MqttSubscriber:
+    """
+    Client subscribe đơn giản: bật/tắt bằng ``enabled``, buffer ``max_messages`` tin mới nhất.
+
+    Gắn vào ``app.state.mqtt`` để route HTTP đọc ``status()`` / ``latest_messages()``.
+    """
+
     def __init__(
         self,
         *,
@@ -64,6 +87,7 @@ class MqttSubscriber:
         self._client.on_message = self._on_message
 
     def start(self) -> None:
+        """Kết nối broker và ``loop_start()``; nếu ``enabled`` false hoặc đã start thì không làm gì."""
         if not self._enabled:
             return
         if self._started_at is not None:
@@ -73,11 +97,12 @@ class MqttSubscriber:
         try:
             self._client.connect(self._host, self._port, keepalive=self._keepalive)
             self._client.loop_start()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — ghi lỗi, không crash app
             self._last_connect_error = str(exc)
             self._connected = False
 
     def stop(self) -> None:
+        """Dừng loop và disconnect (gọi khi shutdown app)."""
         if not self._enabled:
             return
         try:
@@ -90,6 +115,7 @@ class MqttSubscriber:
         self._connected = False
 
     def status(self) -> dict[str, Any]:
+        """Snapshot trạng thái phục vụ ``GET /api/mqtt/status``."""
         return {
             "enabled": self._enabled,
             "connected": self._connected,
@@ -104,10 +130,12 @@ class MqttSubscriber:
         }
 
     def message_count(self) -> int:
+        """Số tin đang giữ trong buffer."""
         with self._lock:
             return len(self._messages)
 
     def latest_messages(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Trả tối đa ``limit`` tin cuối (mặc định 50, tối đa 1000)."""
         limit = max(1, min(int(limit), 1000))
         with self._lock:
             msgs = list(self._messages)[-limit:]
@@ -123,6 +151,7 @@ class MqttSubscriber:
         ]
 
     def _on_connect(self, client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any, properties: Any) -> None:  # noqa: ARG002
+        """Callback paho: subscribe từng topic sau khi kết nối thành công."""
         self._connected = bool(getattr(reason_code, "value", reason_code) == 0)
         self._last_connect_error = None if self._connected else f"connect failed: {reason_code}"
         if not self._connected:
@@ -134,11 +163,13 @@ class MqttSubscriber:
                 self._last_connect_error = f"subscribe failed ({topic}): {exc}"
 
     def _on_disconnect(self, client: mqtt.Client, userdata: Any, disconnect_flags: Any, reason_code: Any, properties: Any) -> None:  # noqa: ARG002
+        """Callback paho: đánh dấu mất kết nối."""
         self._connected = False
         if reason_code not in (0, None):
             self._last_connect_error = f"disconnected: {reason_code}"
 
     def _on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:  # noqa: ARG002
+        """Callback paho: decode UTF-8, thử pretty-print JSON, append vào deque."""
         try:
             payload_raw = msg.payload.decode("utf-8", errors="replace")
         except Exception:  # noqa: BLE001
@@ -161,4 +192,3 @@ class MqttSubscriber:
                     received_at=time.time(),
                 )
             )
-

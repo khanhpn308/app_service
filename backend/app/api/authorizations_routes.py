@@ -1,3 +1,12 @@
+"""
+REST API bảng ``device_authorization`` (quyền user trên thiết bị).
+
+- **GET**: bắt buộc đúng một query ``user_id`` **hoặc** ``device_id`` — liệt kê authorization tương ứng.
+- **POST**: tạo bản ghi mới (khóa chính ghép ``device_id`` + ``user_id``); trùng → 409.
+
+Đây là lớp phân quyền **thực** so với cột legacy ``device.user_device_asignment_id``.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -17,6 +26,7 @@ def list_authorizations(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[AuthorizationPublic]:
+    """Lọc theo user hoặc theo thiết bị (không cho cả hai null/ cả hai cùng lúc)."""
     if (user_id is None) == (device_id is None):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -44,6 +54,7 @@ def create_authorization(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> AuthorizationPublic:
+    """Gán quyền user–device; ``granted_by`` thường là username admin (chuỗi)."""
     row = DeviceAuthorization(
         device_id=body.device_id,
         user_id=body.user_id,
@@ -56,11 +67,10 @@ def create_authorization(
         db.commit()
     except IntegrityError:
         db.rollback()
-        # Primary key is (device_id, user_id) => duplicate assignment
+        # Khóa chính (device_id, user_id) trùng
         raise HTTPException(
             status_code=409,
             detail="Authorization already exists for this user/device",
         )
     db.refresh(row)
     return AuthorizationPublic.model_validate(row)
-

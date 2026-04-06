@@ -1,3 +1,10 @@
+"""
+Gom tất cả APIRouter con thành một ``api_router``.
+
+Mỗi file ``*_routes.py`` định nghĩa một nhóm endpoint (auth, devices, …). Module này chỉ **include**,
+không chứa logic nghiệp vụ — dễ bật/tắt nhóm API hoặc đổi prefix tập trung tại ``main.py`` (``/api``).
+"""
+
 from fastapi import APIRouter
 
 from .auth_routes import router as auth_router
@@ -14,4 +21,3 @@ api_router.include_router(auth_router)
 api_router.include_router(devices_router)
 api_router.include_router(authorizations_router)
 api_router.include_router(users_router)
-

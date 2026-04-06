@@ -1,3 +1,9 @@
+/**
+ * Khung UI sau đăng nhập: thanh nav (desktop + mobile), nút logout, `<Outlet />` cho nội dung trang.
+ *
+ * - Nav items: Home, Dashboard, Devices; thêm User Management nếu `isAdmin()`.
+ * - `isNavItemActive`: highlight `/devices` khi đang ở `/devices/:id`.
+ */
 import React from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';

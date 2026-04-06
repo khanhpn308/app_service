@@ -1,3 +1,7 @@
+/**
+ * Route guard lồng trong `ProtectedRoute`: yêu cầu `user.role === 'admin'`.
+ * User thường → trang `Forbidden` (403 UI), không redirect login.
+ */
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';

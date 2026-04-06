@@ -1,3 +1,7 @@
+/**
+ * Cấu hình Vite (dev server + build SPA).
+ * Proxy `/api` → backend (`API_PROXY_TARGET` hoặc `127.0.0.1:8000`) để tránh CORS khi dev local.
+ */
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';

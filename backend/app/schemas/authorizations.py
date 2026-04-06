@@ -1,3 +1,9 @@
+"""
+Schema cho bảng ``device_authorization`` và tóm tắt thiết bị trên profile user.
+
+``AuthorizedDeviceBrief`` chỉ cần ``device_id`` + ``devicename`` để hiển thị nhanh trong ``GET /users``.
+"""
+
 from datetime import date
 
 from pydantic import BaseModel, Field

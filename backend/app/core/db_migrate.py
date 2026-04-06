@@ -1,4 +1,11 @@
-"""Lightweight schema patches for existing DB volumes (initdb scripts only run once)."""
+"""
+Migration nhẹ cho volume MySQL đã tồn tại (script init chỉ chạy một lần khi tạo volume).
+
+Mỗi hàm ``ensure_*`` kiểm tra ``information_schema`` rồi ``ALTER``/``UPDATE`` nếu thiếu hoặc sai kiểu.
+Gọi từ ``main.lifespan`` sau ``create_all`` — không dùng Alembic full để giữ deploy đơn giản.
+
+Lightweight schema patches for existing DB volumes (initdb scripts only run once).
+"""
 
 import logging
 

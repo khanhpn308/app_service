@@ -21,6 +21,7 @@ backend/__pycache__/
 backend/.pytest_cache/
 backend/.mypy_cache/
 
+.__pycache__
 # IDE and OS
 .idea/
 .vscode/

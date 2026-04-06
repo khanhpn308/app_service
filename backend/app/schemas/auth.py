@@ -1,3 +1,13 @@
+"""
+Schema Pydantic cho luồng auth và user public (JSON request/response).
+
+Khác ``app.models`` (ORM — bảng DB), module này mô tả **hợp đồng API**: validate đầu vào, tính field ảo
+(``validity_days``, ``remaining_days``), và nhúng ``authorized_devices`` khi trả danh sách user.
+
+Viết tắt:
+    - **CCCD**: Căn cước công dân — 12 chữ số.
+"""
+
 from datetime import date
 from decimal import Decimal
 from typing import Literal

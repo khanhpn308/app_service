@@ -1,3 +1,14 @@
+/**
+ * Định tuyến ứng dụng IoT (react-router-dom v6).
+ *
+ * Cấu trúc:
+ * - `AuthProvider`: JWT + profile trong `localStorage`, bọc toàn bộ route.
+ * - Public: `/login`, `/forgot-password`.
+ * - `ProtectedRoute`: cần đăng nhập → bọc `Layout` (nav + outlet).
+ * - `AdminRoute`: lồng trong protected → chỉ `role === 'admin'`, không thì `Forbidden`.
+ *
+ * Viết tắt: `Outlet` = render route con; `Navigate` = redirect.
+ */
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '../contexts/AuthContext';

@@ -6,6 +6,14 @@ import { apiFetch } from '../lib/api';
 import { mockDevices } from '../data/mockData';
 import AddDeviceModal from '../components/AddDeviceModal';
 
+const normalizeDeviceType = (type) => {
+  const t = String(type || '').trim().toLowerCase();
+  if (t === 'temperature' || t.includes('nhiệt')) return 'Temperature';
+  if (t === 'power' || t.includes('công suất')) return 'Power';
+  if (t === 'vibration' || t.includes('độ rung')) return 'Vibration';
+  return 'Temperature';
+};
+
 const Devices = () => {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
@@ -165,7 +173,7 @@ const Devices = () => {
     return devices.map((d) => {
       const id = d.id ?? d.device_id;
       const name = d.name ?? d.devicename ?? `Device ${id}`;
-      const type = d.device_type ?? d.type ?? 'Motor';
+      const type = normalizeDeviceType(d.device_type ?? d.type);
       const location = d.location ?? '—';
       const lastUpdate = d.lastUpdate ?? '—';
       const value = d.value ?? '—';

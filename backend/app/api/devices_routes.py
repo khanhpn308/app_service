@@ -1,3 +1,15 @@
+"""
+REST API thiết bị IoT (bảng ``device``) và liên kết phân quyền (``device_authorization``).
+
+Quy ước:
+    - **Admin**: CRUD đầy đủ, xem mọi thiết bị, cột ``user_device_asignment_id`` trong chi tiết.
+    - **User thường**: chỉ xem thiết bị có trong ``device_authorization`` và chưa hết ``expired_at``
+      (hoặc ``expired_at`` null).
+
+Viết tắt:
+    - **RBAC** ở đây kết hợp ``role`` + bảng quan hệ user–device.
+"""
+
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,6 +37,7 @@ def list_devices_admin(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[DevicePublic]:
+    """Admin: danh sách toàn bộ thiết bị (sắp theo ``device_id``)."""
     rows = db.query(Device).order_by(Device.device_id.asc()).all()
     return [DevicePublic.model_validate(r) for r in rows]
 
@@ -35,6 +48,7 @@ def create_device(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> DevicePublic:
+    """Admin: tạo thiết bị mới; 409 nếu trùng khóa chính ``device_id``."""
     row = Device(
         device_id=body.device_id,
         devicename=body.devicename,
@@ -61,6 +75,7 @@ def patch_device(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> DevicePublic:
+    """Admin: cập nhật một phần trường tĩnh trên thiết bị."""
     row = db.query(Device).filter(Device.device_id == device_id).first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
@@ -79,6 +94,7 @@ def list_devices_for_current_user(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[DevicePublic]:
+    """User: thiết bị được phân quyền và còn hiệu lực (theo ngày ``expired_at``)."""
     today = date.today()
     q = (
         db.query(Device)
@@ -97,6 +113,7 @@ def delete_device(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> None:
+    """Admin: xóa thiết bị và mọi bản ghi ``device_authorization`` liên quan."""
     row = db.query(Device).filter(Device.device_id == device_id).first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
@@ -113,7 +130,12 @@ def get_device(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> DeviceDetailPublic:
-    """Admin: any device. User: only if authorized and not expired."""
+    """
+    Chi tiết thiết bị + danh sách user được phân quyền.
+
+    User thường chỉ xem được nếu có authorization còn hạn; admin xem mọi thiết bị.
+    ``user_device_asignment_id`` chỉ trả cho admin (tránh lộ legacy id cho user thường).
+    """
     row = db.query(Device).filter(Device.device_id == device_id).first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")

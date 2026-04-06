@@ -14,13 +14,9 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
   const [submitError, setSubmitError] = useState('');
 
   const deviceTypes = [
-    'Temperature',
-    'Humidity',
-    'Motion',
-    'Thermostat',
-    'Air Quality',
-    'Lighting',
-    'Other'
+    { value: 'Temperature', label: 'Nhiệt độ (Temperature)' },
+    { value: 'Power', label: 'Công suất (Power)' },
+    { value: 'Vibration', label: 'Độ rung (Vibration)' },
   ];
 
   const validateForm = () => {
@@ -63,10 +59,10 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
         const unit =
           formData.type === 'Temperature'
             ? '°C'
-            : formData.type === 'Humidity'
-              ? '%'
-              : formData.type === 'Lighting'
-                ? '%'
+            : formData.type === 'Power'
+              ? 'V/A'
+              : formData.type === 'Vibration'
+                ? 'mm/s'
                 : 'units';
 
         const created = await apiFetch('/api/devices', {
@@ -162,8 +158,8 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
               onChange={handleChange}
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
             >
-              {deviceTypes.map(type => (
-                <option key={type} value={type}>{type}</option>
+              {deviceTypes.map((type) => (
+                <option key={type.value} value={type.value}>{type.label}</option>
               ))}
             </select>
           </div>

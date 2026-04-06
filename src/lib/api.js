@@ -1,9 +1,16 @@
+/**
+ * Client HTTP gọi FastAPI — fetch wrapper thống nhất.
+ *
+ * - `VITE_API_URL`: base URL backend (Vite env). Rỗng = cùng origin (dev proxy hoặc CDN chung).
+ * - `skipAuth: true`: không gắn Bearer (login, public bootstrap, …).
+ * - Lỗi: đọc `detail` từ JSON (FastAPI) hoặc `statusText`; ném `Error` để UI bắt.
+ *
+ * @param {string} path - Đường dẫn từ gốc API, ví dụ `/api/auth/me`
+ * @param {RequestInit & { skipAuth?: boolean }} [options] - Tuỳ chọn fetch; `skipAuth` loại trừ header JWT
+ * @returns {Promise<any>} JSON đã parse hoặc null nếu body rỗng
+ */
 const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
-/**
- * @param {string} path
- * @param {RequestInit} [options]
- */
 export async function apiFetch(path, options = {}) {
   const skipAuth = options.skipAuth === true;
   const token = skipAuth ? null : localStorage.getItem('iot_token');
