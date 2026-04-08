@@ -13,7 +13,7 @@ instance ``app`` dùng cho uvicorn: ``uvicorn app.main:app``.
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
@@ -27,7 +27,9 @@ from app.core.db_migrate import (
     ensure_user_expired_at_column,
 )
 from app.core.db_wait import wait_for_db
+from app.core.influx_service import InfluxService
 from app.core.mqtt_subscriber import MqttSubscriber
+from app.core.realtime_hub import RealtimeHub
 from app.core.seed import ensure_default_admin, ensure_default_devices
 from app.core.user_expiry import deactivate_expired_users
 from app.models import device  # noqa: F401 — đăng ký model với metadata
@@ -63,6 +65,25 @@ async def lifespan(app: FastAPI):
         ensure_default_devices(db)
         deactivate_expired_users(db)
 
+    influx = InfluxService(
+        enabled=settings.influx_enabled,
+        url=settings.influx_url,
+        token=settings.influx_token,
+        org=settings.influx_org,
+        bucket=settings.influx_bucket,
+        measurement=settings.influx_measurement,
+    )
+    influx.start()
+    app.state.influx = influx
+
+    realtime_hub = RealtimeHub()
+    await realtime_hub.start()
+    app.state.realtime_hub = realtime_hub
+
+    def _handle_sensor_payload(payload: dict) -> None:
+        influx.write_sensor_point(payload)
+        realtime_hub.publish_from_thread(payload)
+
     mqtt_sub = MqttSubscriber(
         enabled=settings.mqtt_enabled,
         host=settings.mqtt_host,
@@ -74,6 +95,7 @@ async def lifespan(app: FastAPI):
         topics_csv=settings.mqtt_topics,
         qos=settings.mqtt_qos,
         max_messages=settings.mqtt_max_messages,
+        on_sensor_payload=_handle_sensor_payload,
     )
     mqtt_sub.start()
     app.state.mqtt = mqtt_sub
@@ -81,6 +103,14 @@ async def lifespan(app: FastAPI):
     try:
         mqtt_sub.stop()
     except Exception:  # noqa: BLE001 — shutdown: không crash process
+        pass
+    try:
+        await realtime_hub.stop()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        influx.stop()
+    except Exception:  # noqa: BLE001
         pass
 
 
@@ -103,6 +133,39 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router, prefix="/api")
+
+    @app.websocket("/ws/global")
+    async def ws_global(websocket: WebSocket) -> None:
+        """WebSocket luồng realtime cho GlobalDashboard."""
+        hub = getattr(app.state, "realtime_hub", None)
+        if hub is None:
+            await websocket.close(code=1011)
+            return
+        await hub.connect_global(websocket)
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            await hub.disconnect_global(websocket)
+        except Exception:
+            await hub.disconnect_global(websocket)
+
+    @app.websocket("/ws/devices/{device_id}")
+    async def ws_device(websocket: WebSocket, device_id: str) -> None:
+        """WebSocket luồng realtime cho dashboard theo từng thiết bị."""
+        hub = getattr(app.state, "realtime_hub", None)
+        if hub is None:
+            await websocket.close(code=1011)
+            return
+        await hub.connect_device(websocket, device_id)
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            await hub.disconnect_device(websocket, device_id)
+        except Exception:
+            await hub.disconnect_device(websocket, device_id)
+
     return app
 
 

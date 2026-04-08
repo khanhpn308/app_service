@@ -33,7 +33,15 @@ import { apiFetch } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 
-const WS_BASE = import.meta.env.VITE_WS_URL ?? '';
+function resolveWsBase() {
+  const envBase = String(import.meta.env.VITE_WS_URL ?? '').trim();
+  if (envBase) return envBase.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${window.location.host}`;
+}
+
+const WS_BASE = resolveWsBase();
 
 function normalizeDeviceType(type) {
   const t = String(type || '').trim().toLowerCase();
@@ -101,6 +109,19 @@ function capPush(arr, item, max = 80) {
   return next.length > max ? next.slice(next.length - max) : next;
 }
 
+function mapHistoryToSeries(item) {
+  const ts = item?.ts ? Number(item.ts) * 1000 : Date.now();
+  return {
+    id: `${item?.device_id || 'd'}-${item?.ts_iso || ts}`,
+    time: formatTime(ts),
+    timestamp: item?.ts_iso || new Date(ts).toISOString(),
+    temperature: Number.isFinite(Number(item?.temperature)) ? Number(item.temperature) : 0,
+    vibration: Number.isFinite(Number(item?.vibration)) ? Number(item.vibration) : 0,
+    voltage: Number.isFinite(Number(item?.voltage)) ? Number(item.voltage) : 0,
+    current: Number.isFinite(Number(item?.current)) ? Number(item.current) : 0,
+  };
+}
+
 const DeviceDetail = () => {
   const { deviceId } = useParams();
   const navigate = useNavigate();
@@ -117,7 +138,14 @@ const DeviceDetail = () => {
   const [assignmentError, setAssignmentError] = useState('');
   const [assignmentOk, setAssignmentOk] = useState(false);
   const [realtimeSeries, setRealtimeSeries] = useState([]);
+  const [historyRows, setHistoryRows] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   const [fullscreenMetric, setFullscreenMetric] = useState(null);
+  const [topics, setTopics] = useState([]);
+  const [topicInput, setTopicInput] = useState('');
+  const [topicBusy, setTopicBusy] = useState(false);
+  const [topicError, setTopicError] = useState('');
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
 
@@ -154,7 +182,62 @@ const DeviceDetail = () => {
     };
   }, [deviceId, user?.role]);
 
-  const history = generateDeviceHistory(device?.id ?? deviceId);
+  useEffect(() => {
+    if (!deviceId) return;
+
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError('');
+
+    apiFetch(`/api/mqtt/history?minutes=30&device_id=${encodeURIComponent(deviceId)}`)
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const mapped = items.map(mapHistoryToSeries);
+        setHistoryRows(mapped);
+        setRealtimeSeries(mapped.slice(-80));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setHistoryError(err?.message || 'Khong tai duoc lich su 30 phut');
+        const fallback = generateDeviceHistory(device?.id ?? deviceId).map((row) => ({
+          id: row.id,
+          time: row.timestamp,
+          timestamp: row.timestamp,
+          temperature: Number(row.parameterValue) || 0,
+          vibration: Number(row.parameterValue) || 0,
+          voltage: Number(row.parameterValue) || 0,
+          current: Number(row.parameterValue) || 0,
+        }));
+        setHistoryRows(fallback);
+        setRealtimeSeries(fallback.slice(-80));
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deviceId, device?.id]);
+
+  useEffect(() => {
+    if (!isAdmin()) return;
+    let cancelled = false;
+
+    apiFetch('/api/mqtt/topics')
+      .then((data) => {
+        if (cancelled) return;
+        setTopics(Array.isArray(data?.items) ? data.items : []);
+      })
+      .catch(() => {
+        if (!cancelled) setTopics([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
 
   useEffect(() => {
     if (activeTab !== 'dashboard') return undefined;
@@ -558,8 +641,18 @@ const DeviceDetail = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white">Device History</h3>
-                <span className="text-slate-400 text-sm">{history.length} records</span>
+                <span className="text-slate-400 text-sm">{historyRows.length} records (30 phut)</span>
               </div>
+              {historyLoading && (
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 text-sm">
+                  Dang tai lich su tu InfluxDB...
+                </div>
+              )}
+              {historyError && (
+                <div className="p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-200 text-sm">
+                  {historyError}
+                </div>
+              )}
 
               {/* History Table */}
               <div className="overflow-x-auto">
@@ -578,13 +671,13 @@ const DeviceDetail = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
-                    {history.map((record) => (
+                    {historyRows.map((record, idx) => (
                       <tr key={record.id} className="hover:bg-slate-900 transition-colors duration-150">
                         <td className="px-6 py-4 text-slate-400 text-sm">
-                          {record.id}
+                          {idx + 1}
                         </td>
                         <td className="px-6 py-4 text-white font-medium">
-                          {record.parameterValue}
+                          {`T=${record.temperature.toFixed(2)}°C | Vb=${record.vibration.toFixed(2)}mm/s | U=${record.voltage.toFixed(2)}V | I=${record.current.toFixed(2)}A`}
                         </td>
                         <td className="px-6 py-4 text-slate-400 text-sm">
                           {record.timestamp}
@@ -602,7 +695,7 @@ const DeviceDetail = () => {
               <div>
                 <h3 className="text-lg font-semibold text-white">Device Dashboard</h3>
                 <p className="text-slate-400 text-sm">
-                  Real-time charts for <span className="text-blue-400 font-mono font-semibold">{deviceId}</span>
+                  Real-time charts (30-minute history + live) for <span className="text-blue-400 font-mono font-semibold">{deviceId}</span>
                 </p>
                 {!WS_BASE && (
                   <div className="mt-3 p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-200 text-sm">
@@ -610,6 +703,75 @@ const DeviceDetail = () => {
                   </div>
                 )}
               </div>
+
+              {isAdmin() && (
+                <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 space-y-3">
+                  <h4 className="text-white font-semibold">Quan ly topic MQTT (admin)</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {topics.map((t) => (
+                      <span key={t} className="px-2 py-1 rounded bg-slate-800 text-slate-200 text-xs border border-slate-700">
+                        {t}
+                      </span>
+                    ))}
+                    {topics.length === 0 && <span className="text-slate-400 text-sm">Chua co topic.</span>}
+                  </div>
+                  <div className="flex flex-col md:flex-row gap-3">
+                    <input
+                      type="text"
+                      value={topicInput}
+                      onChange={(e) => setTopicInput(e.target.value)}
+                      placeholder="devices/101/telemetry"
+                      className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                    />
+                    <button
+                      type="button"
+                      disabled={topicBusy}
+                      onClick={() => {
+                        const topic = topicInput.trim();
+                        if (!topic) return;
+                        setTopicBusy(true);
+                        setTopicError('');
+                        apiFetch('/api/mqtt/topics/subscribe', {
+                          method: 'POST',
+                          body: JSON.stringify({ topic }),
+                        })
+                          .then((data) => {
+                            setTopics(Array.isArray(data?.topics) ? data.topics : []);
+                            setTopicInput('');
+                          })
+                          .catch((err) => setTopicError(err?.message || 'Subscribe that bai'))
+                          .finally(() => setTopicBusy(false));
+                      }}
+                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      Subscribe
+                    </button>
+                    <button
+                      type="button"
+                      disabled={topicBusy}
+                      onClick={() => {
+                        const topic = topicInput.trim();
+                        if (!topic) return;
+                        setTopicBusy(true);
+                        setTopicError('');
+                        apiFetch('/api/mqtt/topics/unsubscribe', {
+                          method: 'POST',
+                          body: JSON.stringify({ topic }),
+                        })
+                          .then((data) => {
+                            setTopics(Array.isArray(data?.topics) ? data.topics : []);
+                          })
+                          .catch((err) => setTopicError(err?.message || 'Unsubscribe that bai'))
+                          .finally(() => setTopicBusy(false));
+                      }}
+                      className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      Unsubscribe
+                    </button>
+                  </div>
+                  {topicError && <p className="text-red-400 text-sm">{topicError}</p>}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {deviceMetrics.map((metric) => {

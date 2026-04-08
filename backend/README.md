@@ -27,8 +27,35 @@ On startup, the API also starts an MQTT subscriber (Mosquitto).
 
 - Status: `http://localhost:8000/api/mqtt/status`
 - Latest messages: `http://localhost:8000/api/mqtt/messages?limit=50`
+- Topics (admin): `GET /api/mqtt/topics`
+- Subscribe topic (admin): `POST /api/mqtt/topics/subscribe`
+- Unsubscribe topic (admin): `POST /api/mqtt/topics/unsubscribe`
+- History from InfluxDB (30m default): `GET /api/mqtt/history?minutes=30&device_id=101`
+- WebSocket global: `ws://localhost:8000/ws/global`
+- WebSocket by device: `ws://localhost:8000/ws/devices/{device_id}`
 
 Configure via `.env` (see `.env.example`): `MQTT_HOST`, `MQTT_PORT`, `MQTT_TOPICS`, ...
+
+### Binary payload decode (NanoPB template)
+
+File: `app/core/payload_decoder.py`
+
+- API server decodes MQTT binary payload with a template layout (`_decode_nanopb_template`).
+- This is a scaffold only; replace the template parser to match your real `.proto` schema.
+- Decoded fields are normalized for storage/realtime: `device_id`, `sensor_type`, `temperature`, `vibration`, `voltage`, `current`, `ts`.
+
+### InfluxDB time-series
+
+API writes decoded sensor points into InfluxDB (`sensor_readings` by default).
+
+Required env vars:
+
+- `INFLUX_ENABLED`
+- `INFLUX_URL`
+- `INFLUX_TOKEN`
+- `INFLUX_ORG`
+- `INFLUX_BUCKET`
+- `INFLUX_MEASUREMENT`
 
 ## Environment variables
 
@@ -69,4 +96,3 @@ When deploying on server, paste your `CREATE TABLE ...` statements into `sql/sch
 and mount it to the MySQL container init directory (see `docker-compose.yml` comment).
 
 Passwords are stored as **bcrypt hashes** (not plaintext). If your `password` column is `VARCHAR(45)`, run the SQL in `sql/002_password_column_for_bcrypt.sql`.
-

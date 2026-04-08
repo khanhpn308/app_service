@@ -70,6 +70,14 @@ class Settings(BaseSettings):
     mqtt_qos: int = 0
     mqtt_max_messages: int = 500
 
+    # InfluxDB time-series storage
+    influx_enabled: bool = True
+    influx_url: str = "http://influxdb:8086"
+    influx_token: str = "CHANGE_ME_INFLUX_TOKEN"
+    influx_org: str = "iot"
+    influx_bucket: str = "iot_telemetry"
+    influx_measurement: str = "sensor_readings"
+
     @property
     def database_url(self) -> str:
         """

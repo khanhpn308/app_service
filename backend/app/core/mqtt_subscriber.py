@@ -19,7 +19,9 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
+
+from app.core.payload_decoder import decode_sensor_payload
 
 import paho.mqtt.client as mqtt
 
@@ -60,6 +62,7 @@ class MqttSubscriber:
         topics_csv: str,
         qos: int,
         max_messages: int,
+        on_sensor_payload: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._enabled = enabled
         self._host = host
@@ -70,6 +73,7 @@ class MqttSubscriber:
         self._keepalive = keepalive
         self._topics = _parse_topics(topics_csv)
         self._qos = int(qos)
+        self._on_sensor_payload = on_sensor_payload
 
         self._messages: deque[MqttMessage] = deque(maxlen=max(1, int(max_messages)))
         self._lock = threading.Lock()
@@ -129,6 +133,65 @@ class MqttSubscriber:
             "buffered_messages": self.message_count(),
         }
 
+    def list_topics(self) -> list[str]:
+        """
+        LTP = List Topics.
+
+        Công dụng:
+            - Trả danh sách topic hiện hành (được subscribe khi reconnect).
+        """
+        with self._lock:
+            return list(self._topics)
+
+    def subscribe_topic(self, topic: str, qos: int | None = None) -> bool:
+        """
+        SUB = SUBscribe topic runtime.
+
+        Công dụng:
+            - Thêm topic mới vào danh sách theo dõi.
+            - Nếu đang kết nối broker thì subscribe ngay, không cần restart app.
+        """
+        t = (topic or "").strip()
+        if not t:
+            return False
+
+        with self._lock:
+            if t in self._topics:
+                return False
+            self._topics.append(t)
+
+        if self._connected:
+            try:
+                self._client.subscribe(t, qos=self._qos if qos is None else int(qos))
+            except Exception as exc:  # noqa: BLE001
+                self._last_connect_error = f"subscribe failed ({t}): {exc}"
+        return True
+
+    def unsubscribe_topic(self, topic: str) -> bool:
+        """
+        UNS = UNSubscribe topic runtime.
+
+        Công dụng:
+            - Bỏ topic khỏi danh sách theo dõi động.
+            - Nếu đang kết nối broker thì unsubscribe ngay.
+        """
+        t = (topic or "").strip()
+        if not t:
+            return False
+
+        removed = False
+        with self._lock:
+            if t in self._topics:
+                self._topics = [x for x in self._topics if x != t]
+                removed = True
+
+        if removed and self._connected:
+            try:
+                self._client.unsubscribe(t)
+            except Exception as exc:  # noqa: BLE001
+                self._last_connect_error = f"unsubscribe failed ({t}): {exc}"
+        return removed
+
     def message_count(self) -> int:
         """Số tin đang giữ trong buffer."""
         with self._lock:
@@ -156,7 +219,9 @@ class MqttSubscriber:
         self._last_connect_error = None if self._connected else f"connect failed: {reason_code}"
         if not self._connected:
             return
-        for topic in self._topics:
+        with self._lock:
+            topics = list(self._topics)
+        for topic in topics:
             try:
                 client.subscribe(topic, qos=self._qos)
             except Exception as exc:  # noqa: BLE001
@@ -181,6 +246,19 @@ class MqttSubscriber:
             payload = json.dumps(json.loads(payload_raw), ensure_ascii=False)
         except Exception:  # noqa: BLE001
             pass
+
+        decoded = decode_sensor_payload(str(msg.topic), bytes(msg.payload))
+        if isinstance(decoded, dict):
+            try:
+                payload = json.dumps(decoded, ensure_ascii=False)
+            except Exception:  # noqa: BLE001
+                pass
+
+            if self._on_sensor_payload is not None:
+                try:
+                    self._on_sensor_payload(decoded)
+                except Exception as exc:  # noqa: BLE001
+                    self._last_connect_error = f"sensor payload callback error: {exc}"
 
         with self._lock:
             self._messages.append(

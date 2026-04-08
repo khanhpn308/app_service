@@ -12,7 +12,15 @@ import { Activity, Gauge, Maximize2, Minimize2, Thermometer, Waves, Zap } from '
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
-const WS_BASE = import.meta.env.VITE_WS_URL ?? '';
+function resolveWsBase() {
+  const envBase = String(import.meta.env.VITE_WS_URL ?? '').trim();
+  if (envBase) return envBase.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${window.location.host}`;
+}
+
+const WS_BASE = resolveWsBase();
 
 function normalizeDeviceType(type) {
   const t = String(type || '').trim().toLowerCase();
@@ -206,6 +214,21 @@ export default function GlobalDashboard() {
           });
           return next;
         });
+
+        const history = await apiFetch('/api/mqtt/history?minutes=30');
+        const rows = Array.isArray(history?.items) ? history.items : [];
+        const latestByDevice = {};
+        rows.forEach((r) => {
+          const id = String(r?.device_id || '');
+          if (!id) return;
+          latestByDevice[id] = {
+            current: toFiniteNumber(r?.current),
+            voltage: toFiniteNumber(r?.voltage),
+            temperature: toFiniteNumber(r?.temperature),
+            vibration: toFiniteNumber(r?.vibration),
+          };
+        });
+        setMetricsByDevice((prev) => ({ ...prev, ...latestByDevice }));
       } catch (err) {
         if (!mounted) return;
         setLoadError(err?.message || 'Khong tai duoc danh sach thiet bi');
