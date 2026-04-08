@@ -128,6 +128,7 @@ def ensure_device_ui_columns(engine: Engine) -> None:
     alters = [
         ("location", "ALTER TABLE `device` ADD COLUMN `location` VARCHAR(255) NULL"),
         ("device_type", "ALTER TABLE `device` ADD COLUMN `device_type` VARCHAR(45) NULL"),
+        ("topic", "ALTER TABLE `device` ADD COLUMN `topic` VARCHAR(255) NULL"),
     ]
     with engine.begin() as conn:
         for col_name, ddl in alters:
@@ -148,3 +149,22 @@ def ensure_device_ui_columns(engine: Engine) -> None:
             else:
                 logger.debug("db_migrate: device.%s already present", col_name)
     logger.info("db_migrate: ensure_device_ui_columns OK")
+
+
+def ensure_device_topic_column(engine: Engine) -> None:
+    """Ensure persisted MQTT topic column exists on `device` for auto-subscribe flow."""
+    with engine.begin() as conn:
+        r = conn.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'device'
+                  AND COLUMN_NAME = 'topic'
+                """
+            )
+        )
+        if (r.scalar() or 0) == 0:
+            conn.execute(text("ALTER TABLE `device` ADD COLUMN `topic` VARCHAR(255) NULL"))
+            logger.info("db_migrate: added device.topic")
+    logger.info("db_migrate: ensure_device_topic_column OK")

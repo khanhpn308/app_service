@@ -20,6 +20,7 @@ import GlobalDashboard from '../pages/GlobalDashboard';
 import Devices from '../pages/Devices';
 import DeviceDetail from '../pages/DeviceDetail';
 import UserManagement from '../pages/UserManagement';
+import TopicManagement from '../pages/TopicManagement';
 import ChangePassword from '../pages/ChangePassword';
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
@@ -42,6 +43,7 @@ function IoTApp() {
               <Route path="/devices/:deviceId" element={<DeviceDetail />} />
               <Route element={<AdminRoute />}>
                 <Route path="/user-management" element={<UserManagement />} />
+                <Route path="/topic-management" element={<TopicManagement />} />
               </Route>
             </Route>
           </Route>

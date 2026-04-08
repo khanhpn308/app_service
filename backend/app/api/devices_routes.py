@@ -12,7 +12,7 @@ Viết tắt:
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -25,11 +25,24 @@ from app.schemas.devices import (
     DeviceAuthorizedUser,
     DeviceCreate,
     DeviceDetailPublic,
+    DeviceTopicPublic,
+    DeviceTopicUpdate,
     DevicePublic,
     DeviceUpdate,
 )
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+
+
+def _sync_topic_runtime(request: Request, old_topic: str, new_topic: str) -> None:
+    """Đồng bộ subscribe/unsubscribe topic trên MQTT subscriber runtime."""
+    mqtt = getattr(request.app.state, "mqtt", None)
+    if mqtt is None:
+        return
+    if old_topic and old_topic != new_topic:
+        mqtt.unsubscribe_topic(old_topic)
+    if new_topic and new_topic != old_topic:
+        mqtt.subscribe_topic(new_topic)
 
 
 @router.get("", response_model=list[DevicePublic])
@@ -57,6 +70,7 @@ def create_device(
         user_device_asignment_id=body.user_device_asignment_id,
         location=body.location,
         device_type=body.device_type,
+        topic=body.topic,
     )
     db.add(row)
     try:
@@ -72,6 +86,7 @@ def create_device(
 def patch_device(
     device_id: int,
     body: DeviceUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> DevicePublic:
@@ -81,12 +96,65 @@ def patch_device(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
     data = body.model_dump(exclude_unset=True)
+    old_topic = (row.topic or "").strip()
     for key, val in data.items():
         setattr(row, key, val)
 
     db.commit()
     db.refresh(row)
+
+    if "topic" in data:
+        new_topic = (row.topic or "").strip()
+        _sync_topic_runtime(request, old_topic, new_topic)
     return DevicePublic.model_validate(row)
+
+
+@router.get("/topics", response_model=list[DeviceTopicPublic])
+def list_device_topics(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> list[DeviceTopicPublic]:
+    """Admin: danh sách topic đã lưu theo từng thiết bị."""
+    rows = db.query(Device).order_by(Device.device_id.asc()).all()
+    return [
+        DeviceTopicPublic(
+            device_id=r.device_id,
+            devicename=r.devicename,
+            status=r.status,
+            topic=r.topic,
+        )
+        for r in rows
+    ]
+
+
+@router.put("/{device_id}/topic", response_model=DeviceTopicPublic)
+def update_device_topic(
+    device_id: int,
+    body: DeviceTopicUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> DeviceTopicPublic:
+    """Admin: cập nhật topic thiết bị và đồng bộ subscribe runtime."""
+    row = db.query(Device).filter(Device.device_id == device_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    old_topic = (row.topic or "").strip()
+    row.topic = (body.topic or "").strip() or None
+
+    db.commit()
+    db.refresh(row)
+
+    new_topic = (row.topic or "").strip()
+    _sync_topic_runtime(request, old_topic, new_topic)
+
+    return DeviceTopicPublic(
+        device_id=row.device_id,
+        devicename=row.devicename,
+        status=row.status,
+        topic=row.topic,
+    )
 
 
 @router.get("/my", response_model=list[DevicePublic])

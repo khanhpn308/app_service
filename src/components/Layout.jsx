@@ -7,7 +7,7 @@
 import React from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Home, LayoutDashboard, Cpu, Users, LogOut, KeyRound } from 'lucide-react';
+import { Home, LayoutDashboard, Cpu, Users, LogOut, KeyRound, RadioTower } from 'lucide-react';
 
 const Layout = () => {
   const { logout, user, isAdmin } = useAuth();
@@ -21,6 +21,7 @@ const Layout = () => {
 
   if (isAdmin()) {
     navItems.push({ to: '/user-management', label: 'Quản lý người dùng', icon: Users });
+    navItems.push({ to: '/topic-management', label: 'Quản lý topic', icon: RadioTower });
   }
   navItems.push({ to: '/change-password', label: 'Đổi mật khẩu', icon: KeyRound });
 

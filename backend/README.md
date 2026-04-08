@@ -48,6 +48,8 @@ File: `app/core/payload_decoder.py`
 
 API writes decoded sensor points into InfluxDB (`sensor_readings` by default).
 
+Recommended deployment: run InfluxDB in a separate stack (`influxdb_service`) and connect from backend via service name `influxdb` on shared Docker network `iot-net`.
+
 Required env vars:
 
 - `INFLUX_ENABLED`
@@ -56,6 +58,12 @@ Required env vars:
 - `INFLUX_ORG`
 - `INFLUX_BUCKET`
 - `INFLUX_MEASUREMENT`
+
+### Device topic persistence (DB)
+
+- Bảng `device` có thêm cột `topic` để lưu topic MQTT theo từng thiết bị.
+- Khi backend khởi động, hệ thống tự nạp lại các topic này để subscribe runtime.
+- Khi admin cập nhật `topic` qua `PATCH /api/devices/{device_id}`, backend sẽ tự đồng bộ subscribe/unsubscribe tương ứng.
 
 ## Environment variables
 

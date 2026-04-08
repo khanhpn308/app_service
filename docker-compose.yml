@@ -1,21 +1,4 @@
 services:
-  influxdb:
-    image: influxdb:2.7
-    container_name: influxdb
-    ports:
-      - "8086:8086"
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_INIT_USERNAME:-admin}
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_INIT_PASSWORD:-change-me-influx-admin}
-      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG:-iot}
-      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET:-iot_telemetry}
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN:-CHANGE_ME_INFLUX_TOKEN}
-    volumes:
-      - influxdb-data:/var/lib/influxdb2
-    networks:
-      - iot-net
-
   backend:
     image: python:3.12-slim
     working_dir: /app
@@ -51,8 +34,6 @@ services:
       INFLUX_ORG: ${INFLUX_ORG:-iot}
       INFLUX_BUCKET: ${INFLUX_BUCKET:-iot_telemetry}
       INFLUX_MEASUREMENT: ${INFLUX_MEASUREMENT:-sensor_readings}
-    depends_on:
-      - influxdb
     networks:
       - iot-net
 
@@ -70,6 +51,3 @@ services:
 networks:
   iot-net:
     external: true
-
-volumes:
-  influxdb-data:

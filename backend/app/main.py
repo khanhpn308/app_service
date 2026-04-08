@@ -22,6 +22,7 @@ from app.core.db import SessionLocal, engine
 from app.core.db_migrate import (
     ensure_device_authorization_granted_by_varchar,
     ensure_device_drop_last_reading_columns,
+    ensure_device_topic_column,
     ensure_device_ui_columns,
     ensure_device_user_device_asignment_id_column,
     ensure_user_expired_at_column,
@@ -32,6 +33,7 @@ from app.core.mqtt_subscriber import MqttSubscriber
 from app.core.realtime_hub import RealtimeHub
 from app.core.seed import ensure_default_admin, ensure_default_devices
 from app.core.user_expiry import deactivate_expired_users
+from app.models.device import Device
 from app.models import device  # noqa: F401 — đăng ký model với metadata
 from app.models import device_authorization  # noqa: F401
 from app.models import user  # noqa: F401
@@ -59,6 +61,7 @@ async def lifespan(app: FastAPI):
     ensure_device_user_device_asignment_id_column(engine)
     ensure_device_drop_last_reading_columns(engine)
     ensure_device_ui_columns(engine)
+    ensure_device_topic_column(engine)
     ensure_device_authorization_granted_by_varchar(engine)
     with SessionLocal() as db:
         ensure_default_admin(db)
@@ -98,6 +101,13 @@ async def lifespan(app: FastAPI):
         on_sensor_payload=_handle_sensor_payload,
     )
     mqtt_sub.start()
+    # Restore topic subscriptions from persisted device.topic values.
+    with SessionLocal() as db:
+        topic_rows = db.query(Device.topic).filter(Device.topic.is_not(None)).all()
+    for (topic,) in topic_rows:
+        t = str(topic or "").strip()
+        if t:
+            mqtt_sub.subscribe_topic(t)
     app.state.mqtt = mqtt_sub
     yield
     try:

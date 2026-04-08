@@ -29,3 +29,5 @@ class Device(Base):
     # Static display / classification only. Live telemetry comes from MQTT/payload, not stored here.
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     device_type: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    # Persisted MQTT topic used for auto subscribe (one topic per device row).
+    topic: Mapped[str | None] = mapped_column(String(255), nullable=True)
