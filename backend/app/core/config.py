@@ -37,21 +37,22 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # Nguồn sau ghi đè nguồn trước. .env không được thắng env Docker; env phải thắng file secret mặc định.
+        # Priority: Docker env vars > .env file > secrets > init/defaults
+        # This allows Docker to override .env which is desired for production
         return (
-            init_settings,
-            dotenv_settings,
+            env_settings,       # Environment variables (highest priority)
+            dotenv_settings,    # .env file
             file_secret_settings,
-            env_settings,
+            init_settings,      # Default values (lowest priority)
         )
 
     app_name: str = "IoT Backend API"
     environment: str = "dev"
     cors_origins: str = "http://localhost:3000"
-    db_host: str = "127.0.0.1"
+    db_host: str = "db"
     db_port: int = 3306
-    db_user: str = "root"
-    db_password: str = "CHANGE_ME"
+    db_user: str = "iot_user"
+    db_password: str = "CHANGE_ME_APP_PASSWORD"
     db_name: str = "iot"
 
     jwt_secret: str = "change-me-in-production"

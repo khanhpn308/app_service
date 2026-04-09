@@ -35,11 +35,6 @@ services:
       - .env
     environment:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
       MQTT_ENABLED: ${MQTT_ENABLED:-true}
       MQTT_HOST: ${MQTT_HOST:-mosquitto}
       MQTT_PORT: ${MQTT_PORT:-1883}
