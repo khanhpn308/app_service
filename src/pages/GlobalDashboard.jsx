@@ -22,8 +22,16 @@ function resolveWsBase() {
 
 const WS_BASE = resolveWsBase();
 
+function foldText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 function normalizeDeviceType(type) {
-  const t = String(type || '').trim().toLowerCase();
+  const t = foldText(type);
   if (t === 'temperature' || t.includes('nhiet')) return 'Temperature';
   if (t === 'power' || t.includes('cong suat')) return 'Power';
   if (t === 'vibration' || t.includes('do rung')) return 'Vibration';
@@ -31,7 +39,9 @@ function normalizeDeviceType(type) {
 }
 
 function inferDeviceTypeFromUpdate(update) {
-  const normalized = normalizeDeviceType(update?.device_type ?? update?.type);
+  const normalized = normalizeDeviceType(
+    update?.device_type ?? update?.type ?? update?.sensor_type ?? update?.sensorType
+  );
   if (normalized) return normalized;
 
   const hasVoltage = Number.isFinite(Number(update?.voltage));
@@ -218,17 +228,46 @@ export default function GlobalDashboard() {
         const history = await apiFetch('/api/mqtt/history?minutes=30');
         const rows = Array.isArray(history?.items) ? history.items : [];
         const latestByDevice = {};
+        const historyTypeByDevice = {};
+        const discoveredFromHistory = new Set();
         rows.forEach((r) => {
           const id = String(r?.device_id || '');
           if (!id) return;
+          discoveredFromHistory.add(id);
           latestByDevice[id] = {
             current: toFiniteNumber(r?.current),
             voltage: toFiniteNumber(r?.voltage),
             temperature: toFiniteNumber(r?.temperature),
             vibration: toFiniteNumber(r?.vibration),
           };
+          const inferredType = normalizeDeviceType(r?.sensor_type);
+          if (inferredType) {
+            historyTypeByDevice[id] = inferredType;
+          }
         });
         setMetricsByDevice((prev) => ({ ...prev, ...latestByDevice }));
+        if (discoveredFromHistory.size > 0) {
+          setDevices((prev) => {
+            const exists = new Set(prev.map((d) => d.deviceId));
+            const added = Array.from(discoveredFromHistory)
+              .filter((id) => !exists.has(id))
+              .map((id) => ({
+                deviceId: id,
+                name: `Device ${id}`,
+                deviceType: historyTypeByDevice[id] || '',
+              }));
+            return added.length ? [...prev, ...added] : prev;
+          });
+        }
+        if (Object.keys(historyTypeByDevice).length > 0) {
+          setDevices((prev) =>
+            prev.map((d) => {
+              const inferred = historyTypeByDevice[d.deviceId];
+              if (!inferred || inferred === d.deviceType) return d;
+              return { ...d, deviceType: inferred };
+            })
+          );
+        }
       } catch (err) {
         if (!mounted) return;
         setLoadError(err?.message || 'Khong tai duoc danh sach thiet bi');

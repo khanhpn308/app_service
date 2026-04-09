@@ -100,3 +100,10 @@ def mqtt_history(
     influx = _get_influx(request)
     items = influx.query_history(minutes=minutes, device_id=device_id)
     return {"items": items, "minutes": minutes, "device_id": device_id}
+
+
+@router.get("/influx/status")
+def mqtt_influx_status(request: Request):
+    """Trạng thái Influx service: enabled/start/bucket/last_error để debug ghi dữ liệu."""
+    influx = _get_influx(request)
+    return influx.status()

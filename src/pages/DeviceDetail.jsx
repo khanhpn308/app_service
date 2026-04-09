@@ -109,6 +109,12 @@ function capPush(arr, item, max = 80) {
   return next.length > max ? next.slice(next.length - max) : next;
 }
 
+function normalizeEventTsToMs(ts) {
+  const n = Number(ts);
+  if (!Number.isFinite(n)) return Date.now();
+  return n > 1_000_000_000_000 ? n : n * 1000;
+}
+
 function mapHistoryToSeries(item) {
   const ts = item?.ts ? Number(item.ts) * 1000 : Date.now();
   return {
@@ -188,11 +194,25 @@ const DeviceDetail = () => {
     let cancelled = false;
     setHistoryLoading(true);
     setHistoryError('');
+    const preferredTopic = String(apiDetail?.topic || '').trim();
 
     apiFetch(`/api/mqtt/history?minutes=30&device_id=${encodeURIComponent(deviceId)}`)
-      .then((data) => {
+      .then(async (data) => {
         if (cancelled) return;
-        const items = Array.isArray(data?.items) ? data.items : [];
+        let items = Array.isArray(data?.items) ? data.items : [];
+
+        // Fallback: nhiều node gửi device_id kiểu chuỗi (vd ESP32_WS_01)
+        // không khớp device_id số trong DB. Khi đó lọc theo topic của thiết bị.
+        if (items.length === 0 && preferredTopic) {
+          try {
+            const all = await apiFetch('/api/mqtt/history?minutes=30');
+            const allItems = Array.isArray(all?.items) ? all.items : [];
+            items = allItems.filter((x) => String(x?.topic || '').trim() === preferredTopic);
+          } catch {
+            // keep original empty list
+          }
+        }
+
         const mapped = items.map(mapHistoryToSeries);
         setHistoryRows(mapped);
         setRealtimeSeries(mapped.slice(-80));
@@ -219,7 +239,7 @@ const DeviceDetail = () => {
     return () => {
       cancelled = true;
     };
-  }, [deviceId, device?.id]);
+  }, [deviceId, device?.id, apiDetail?.topic]);
 
   useEffect(() => {
     if (!isAdmin()) return;
@@ -242,12 +262,18 @@ const DeviceDetail = () => {
   useEffect(() => {
     if (activeTab !== 'dashboard') return undefined;
 
+    const preferredTopic = String(apiDetail?.topic || '').trim();
+    const expectedDeviceId = String(deviceId || '').trim();
+
     // WebSocket init (Device-specific dashboard)
     // Connect to a device-specific channel/room by deviceId.
     // Expected payload examples:
     // - { ts, deviceId, current, voltage, temperature, vibration }
     // - { ts, current, voltage, temperature, vibration }  (implicit current device)
-    const url = WS_BASE ? `${WS_BASE}/ws/devices/${deviceId}` : null;
+    // Nếu có topic, dùng global channel rồi lọc theo topic để tránh lệch device_id DB vs payload.
+    const url = WS_BASE
+      ? (preferredTopic ? `${WS_BASE}/ws/global` : `${WS_BASE}/ws/devices/${deviceId}`)
+      : null;
     if (!url) return undefined;
 
     let closedByEffect = false;
@@ -268,7 +294,17 @@ const DeviceDetail = () => {
         }
 
         const ts = msg.ts ?? Date.now();
-        const time = formatTime(ts);
+        const topic = String(msg.topic || '').trim();
+        const msgDeviceId = String(msg.device_id ?? msg.deviceId ?? '').trim();
+        const matchedByTopic = preferredTopic && topic === preferredTopic;
+        const matchedByDeviceId = msgDeviceId && expectedDeviceId && msgDeviceId === expectedDeviceId;
+
+        if (!matchedByTopic && !matchedByDeviceId) {
+          return;
+        }
+
+        const tsMs = normalizeEventTsToMs(ts);
+        const time = formatTime(tsMs);
 
         const current = Number(msg.current);
         const voltage = Number(msg.voltage);
@@ -300,7 +336,7 @@ const DeviceDetail = () => {
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (wsRef.current) wsRef.current.close();
     };
-  }, [activeTab, deviceId]);
+  }, [activeTab, deviceId, apiDetail?.topic]);
 
   useEffect(() => {
     if (!fullscreenMetric) return undefined;

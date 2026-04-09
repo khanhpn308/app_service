@@ -15,6 +15,21 @@ from typing import Any
 from influxdb_client import InfluxDBClient, Point, WriteOptions
 
 
+def _pick_metric(payload: dict[str, Any], *keys: str) -> float | None:
+    """Lấy metric đầu tiên có thể chuyển về float từ danh sách key alias."""
+    for key in keys:
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
 class InfluxService:
     """Gateway đơn giản cho InfluxDB: viết điểm và query lịch sử theo khoảng thời gian."""
 
@@ -93,13 +108,18 @@ class InfluxService:
         if not self._enabled or not self._started or self._writer is None:
             return
 
-        sensor_type = str(payload.get("sensor_type") or "")
+        sensor_type = str(payload.get("sensor_type") or "").strip().lower()
         device_id = str(payload.get("device_id") or "unknown")
         topic = str(payload.get("topic") or "")
         ts = payload.get("ts")
 
         try:
-            ts_dt = datetime.fromtimestamp(float(ts), tz=UTC)
+            ts_value = float(ts)
+            now_ts = datetime.now(tz=UTC).timestamp()
+            # Bảo vệ khỏi timestamp uptime của thiết bị (thường rất nhỏ, rơi về năm 1970).
+            if ts_value < 946684800 or ts_value > now_ts + (30 * 24 * 3600):
+                raise ValueError("unreasonable event timestamp")
+            ts_dt = datetime.fromtimestamp(ts_value, tz=UTC)
         except Exception:  # noqa: BLE001
             ts_dt = datetime.now(tz=UTC)
 
@@ -111,16 +131,34 @@ class InfluxService:
             .time(ts_dt)
         )
 
+        # Chấp nhận nhiều alias để tương thích payload template cũ/mới.
+        temperature = _pick_metric(payload, "temperature", "temp", "temp_c", "temperature_c")
+        vibration = _pick_metric(payload, "vibration", "vibration_mms", "vibrationMmS", "vib")
+        voltage = _pick_metric(payload, "voltage", "volt", "v")
+        current = _pick_metric(payload, "current", "ampere", "amps", "a")
+
+        generic_value = _pick_metric(payload, "value", "reading", "measurement")
+        if generic_value is not None:
+            if sensor_type == "temperature" and temperature is None:
+                temperature = generic_value
+            elif sensor_type == "vibration" and vibration is None:
+                vibration = generic_value
+            elif sensor_type == "power" and voltage is None and current is None:
+                voltage = generic_value
+
         wrote = False
-        for field_name in ("temperature", "vibration", "voltage", "current"):
-            value = payload.get(field_name)
-            if value is None:
-                continue
-            try:
-                point = point.field(field_name, float(value))
-                wrote = True
-            except Exception:  # noqa: BLE001
-                continue
+        if temperature is not None:
+            point = point.field("temperature", temperature)
+            wrote = True
+        if vibration is not None:
+            point = point.field("vibration", vibration)
+            wrote = True
+        if voltage is not None:
+            point = point.field("voltage", voltage)
+            wrote = True
+        if current is not None:
+            point = point.field("current", current)
+            wrote = True
 
         # Lưu raw payload để debug/truy vết khi cần.
         point = point.field("raw_json", json.dumps(payload.get("raw", {}), ensure_ascii=False))
