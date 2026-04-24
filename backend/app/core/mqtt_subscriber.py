@@ -213,6 +213,27 @@ class MqttSubscriber:
             for m in msgs
         ]
 
+    def publish_binary(self, *, topic: str, payload: bytes, qos: int = 0, retain: bool = False) -> dict[str, Any]:
+        """PUB = publish payload bytes lên topic, dùng cho downlink command/testing."""
+        t = str(topic or "").strip()
+        if not t:
+            return {"ok": False, "error": "topic is required"}
+        if not self._enabled:
+            return {"ok": False, "error": "mqtt disabled"}
+        if not self._connected:
+            return {"ok": False, "error": "mqtt not connected"}
+
+        try:
+            info = self._client.publish(t, payload=bytes(payload), qos=int(qos), retain=bool(retain))
+            return {
+                "ok": bool(info.rc == mqtt.MQTT_ERR_SUCCESS),
+                "rc": int(info.rc),
+                "mid": int(getattr(info, "mid", 0)),
+            }
+        except Exception as exc:  # noqa: BLE001
+            self._last_connect_error = f"publish failed ({t}): {exc}"
+            return {"ok": False, "error": str(exc)}
+
     def _on_connect(self, client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any, properties: Any) -> None:  # noqa: ARG002
         """Callback paho: subscribe từng topic sau khi kết nối thành công."""
         self._connected = bool(getattr(reason_code, "value", reason_code) == 0)

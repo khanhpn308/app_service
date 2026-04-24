@@ -20,6 +20,8 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core.test_payload_codec import decode_test_uplink_binary
+
 
 MIN_REASONABLE_EPOCH_S = 946684800  # 2000-01-01T00:00:00Z
 
@@ -334,21 +336,26 @@ def decode_sensor_payload(topic: str, payload: bytes) -> dict[str, Any]:
         raw = json.loads(text)
         parsed = raw if isinstance(raw, dict) else {"value": raw}
     except Exception:  # noqa: BLE001
-        # 2) Fallback: thử protobuf test schema (SimpleSensor)
+        # 2) Fallback: test uplink binary layout
         try:
-            parsed = _decode_simple_sensor_proto(payload_bytes)
-            parsed["decode_format"] = "protobuf-simple-sensor"
+            parsed = decode_test_uplink_binary(payload_bytes)
+            parsed["decode_format"] = "test-uplink-binary"
         except Exception:
-            # 3) Fallback tiếp: giải mã nhị phân theo khung NanoPB template
+            # 3) Fallback: thử protobuf test schema (SimpleSensor)
             try:
-                parsed = _decode_nanopb_template(payload_bytes)
-                parsed["decode_format"] = "nanopb-template"
-            except Exception as exc:  # noqa: BLE001
-                parsed = {
-                    "decode_format": "raw-bytes",
-                    "decode_error": str(exc),
-                    "raw_hex": payload_bytes.hex(),
-                }
+                parsed = _decode_simple_sensor_proto(payload_bytes)
+                parsed["decode_format"] = "protobuf-simple-sensor"
+            except Exception:
+                # 4) Fallback tiếp: giải mã nhị phân theo khung NanoPB template
+                try:
+                    parsed = _decode_nanopb_template(payload_bytes)
+                    parsed["decode_format"] = "nanopb-template"
+                except Exception as exc:  # noqa: BLE001
+                    parsed = {
+                        "decode_format": "raw-bytes",
+                        "decode_error": str(exc),
+                        "raw_hex": payload_bytes.hex(),
+                    }
 
     # Chuẩn hóa các trường lõi
     topic_device_id = _extract_device_id_from_topic(topic)
@@ -426,6 +433,15 @@ def decode_sensor_payload(topic: str, payload: bytes) -> dict[str, Any]:
         "sensor_type": sensor_type,
         "ts": ts,
         "ts_iso": datetime.fromtimestamp(ts, tz=UTC).isoformat(),
+        "version": parsed.get("version"),
+        "message": parsed.get("message"),
+        "node_id": parsed.get("node_id"),
+        "gateway_id": parsed.get("gateway_id"),
+        "event_timestamp_ms": parsed.get("event_timestamp_ms"),
+        "gateway_timestamp_ms": parsed.get("gateway_timestamp_ms"),
+        "rssi": parsed.get("rssi"),
+        "src_mac": parsed.get("src_mac"),
+        "raw_hex": parsed.get("raw_hex", payload_bytes.hex()),
         "temperature": temperature,
         "is_active": parsed.get("is_active"),
         "sequence": parsed.get("sequence"),

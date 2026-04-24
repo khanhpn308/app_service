@@ -23,6 +23,7 @@ from app.core.db_migrate import (
     ensure_device_authorization_granted_by_varchar,
     ensure_device_drop_last_reading_columns,
     ensure_device_topic_column,
+    ensure_test_logs_table,
     ensure_device_ui_columns,
     ensure_device_user_device_asignment_id_column,
     ensure_user_expired_at_column,
@@ -32,10 +33,12 @@ from app.core.influx_service import InfluxService
 from app.core.mqtt_subscriber import MqttSubscriber
 from app.core.realtime_hub import RealtimeHub
 from app.core.seed import ensure_default_admin, ensure_default_devices
+from app.core.test_service import TestService
 from app.core.user_expiry import deactivate_expired_users
 from app.models.device import Device
 from app.models import device  # noqa: F401 — đăng ký model với metadata
 from app.models import device_authorization  # noqa: F401
+from app.models import test_log  # noqa: F401
 from app.models import user  # noqa: F401
 from app.models.base import Base
 
@@ -62,6 +65,7 @@ async def lifespan(app: FastAPI):
     ensure_device_drop_last_reading_columns(engine)
     ensure_device_ui_columns(engine)
     ensure_device_topic_column(engine)
+    ensure_test_logs_table(engine)
     ensure_device_authorization_granted_by_varchar(engine)
     with SessionLocal() as db:
         ensure_default_admin(db)
@@ -82,10 +86,21 @@ async def lifespan(app: FastAPI):
     realtime_hub = RealtimeHub()
     await realtime_hub.start()
     app.state.realtime_hub = realtime_hub
+    test_service = TestService(SessionLocal)
+    app.state.test_service = test_service
 
     def _handle_sensor_payload(payload: dict) -> None:
         influx.write_sensor_point(payload)
         realtime_hub.publish_from_thread(payload)
+        try:
+            test_service.process_decoded_uplink(
+                decoded=payload,
+                protocol="websocket",
+                topic=str(payload.get("topic") or ""),
+                raw_hex=str(payload.get("raw_hex") or ""),
+            )
+        except Exception:
+            pass
 
     mqtt_sub = MqttSubscriber(
         enabled=settings.mqtt_enabled,

@@ -21,6 +21,7 @@ import Devices from '../pages/Devices';
 import DeviceDetail from '../pages/DeviceDetail';
 import UserManagement from '../pages/UserManagement';
 import TopicManagement from '../pages/TopicManagement';
+import TestPage from '../pages/TestPage';
 import ChangePassword from '../pages/ChangePassword';
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
@@ -44,6 +45,7 @@ function IoTApp() {
               <Route element={<AdminRoute />}>
                 <Route path="/user-management" element={<UserManagement />} />
                 <Route path="/topic-management" element={<TopicManagement />} />
+                <Route path="/test" element={<TestPage />} />
               </Route>
             </Route>
           </Route>

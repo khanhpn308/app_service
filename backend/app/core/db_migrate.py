@@ -168,3 +168,56 @@ def ensure_device_topic_column(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE `device` ADD COLUMN `topic` VARCHAR(255) NULL"))
             logger.info("db_migrate: added device.topic")
     logger.info("db_migrate: ensure_device_topic_column OK")
+
+
+def ensure_test_logs_table(engine: Engine) -> None:
+    """Create `test_logs` table if missing for latency test feature."""
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS `test_logs` (
+                  `id` BIGINT NOT NULL AUTO_INCREMENT,
+                  `protocol` VARCHAR(32) NOT NULL,
+                  `version` INT NULL,
+                                    `message_len` INT NULL,
+                  `message` TEXT NULL,
+                                    `node_id_len` INT NULL,
+                  `node_id` VARCHAR(128) NOT NULL,
+                                    `gateway_id_len` INT NULL,
+                  `gateway_id` VARCHAR(128) NOT NULL,
+                  `event_timestamp_ms` BIGINT NULL,
+                  `gateway_timestamp_ms` BIGINT NULL,
+                  `mark_time_ms` BIGINT NOT NULL,
+                  `delay_node_to_gateway_ms` BIGINT NULL,
+                  `delay_gateway_to_server_ms` BIGINT NULL,
+                  `delay_node_to_server_ms` BIGINT NULL,
+                  `rssi` INT NULL,
+                  `src_mac` VARCHAR(17) NULL,
+                  `topic` VARCHAR(255) NULL,
+                  `raw_hex` TEXT NULL,
+                  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (`id`),
+                  INDEX `idx_test_logs_lookup` (`gateway_id`, `node_id`, `protocol`, `created_at`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
+        )
+        for col_name, ddl in (
+            ("message_len", "ALTER TABLE `test_logs` ADD COLUMN `message_len` INT NULL AFTER `version`"),
+            ("node_id_len", "ALTER TABLE `test_logs` ADD COLUMN `node_id_len` INT NULL AFTER `message`"),
+            ("gateway_id_len", "ALTER TABLE `test_logs` ADD COLUMN `gateway_id_len` INT NULL AFTER `node_id`"),
+        ):
+            r = conn.execute(
+                text(
+                    f"""
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'test_logs'
+                      AND COLUMN_NAME = '{col_name}'
+                    """
+                )
+            )
+            if (r.scalar() or 0) == 0:
+                conn.execute(text(ddl))
+    logger.info("db_migrate: ensure_test_logs_table OK")
