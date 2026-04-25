@@ -28,6 +28,7 @@ export default function TestPage() {
   const [message, setMessage] = useState('');
 
   const [logs, setLogs] = useState([]);
+  const [deviceNameFilter, setDeviceNameFilter] = useState('');
   const [visibleCount, setVisibleCount] = useState(LOG_PAGE);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,16 +39,22 @@ export default function TestPage() {
   const logScrollRef = useRef(null);
 
   const fetchLogs = useCallback(async () => {
-    const logRes = await apiFetch(`/api/test/logs?limit=${LOG_FETCH_LIMIT}`);
+    const q = new URLSearchParams({ limit: String(LOG_FETCH_LIMIT) });
+    const search = deviceNameFilter.trim();
+    if (search) q.set('device_name', search);
+    const logRes = await apiFetch(`/api/test/logs?${q.toString()}`);
     setLogs(Array.isArray(logRes?.items) ? logRes.items : []);
-  }, []);
+  }, [deviceNameFilter]);
 
   const loadAll = async () => {
     setError('');
     setLoading(true);
+    const q = new URLSearchParams({ limit: String(LOG_FETCH_LIMIT) });
+    const search = deviceNameFilter.trim();
+    if (search) q.set('device_name', search);
     const [cfgRes, logsRes] = await Promise.allSettled([
       apiFetch('/api/test/config'),
-      apiFetch(`/api/test/logs?limit=${LOG_FETCH_LIMIT}`),
+      apiFetch(`/api/test/logs?${q.toString()}`),
     ]);
 
     try {
@@ -90,7 +97,7 @@ export default function TestPage() {
     }, 3000);
 
     return () => clearInterval(timer);
-  }, [fetchLogs]);
+  }, [fetchLogs, deviceNameFilter]);
 
   /** Log mới ở đầu danh sách (API sort id desc) → chỉ hiện lại tối đa LOG_PAGE dòng mới nhất. */
   useEffect(() => {
@@ -282,7 +289,16 @@ export default function TestPage() {
 
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 text-slate-300 text-sm">
-          <span>Logs</span>
+          <div className="flex items-center gap-2">
+            <span>Logs</span>
+            <input
+              type="text"
+              value={deviceNameFilter}
+              onChange={(e) => setDeviceNameFilter(e.target.value)}
+              placeholder="Tim theo ten thiet bi..."
+              className="px-2 py-1 rounded-md bg-slate-900 border border-slate-600 text-slate-100 text-xs"
+            />
+          </div>
           {!loading && logs.length > 0 && (
             <span className="text-slate-500 text-xs">
               Hien thi {rows.length} / {logs.length}
@@ -299,28 +315,26 @@ export default function TestPage() {
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-900 border-b border-slate-700 shadow-sm">
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Protocol</th>
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Delay node to gateway</th>
+                <th className="px-4 py-3 text-left text-slate-300 text-sm">Ten thiet bi</th>
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Delay gateway to server</th>
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Delay node to server</th>
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Time test</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
               {loading ? (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>Dang tai...</td>
+                  <td className="px-4 py-4 text-slate-400" colSpan={4}>Dang tai...</td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>Chua co log test</td>
+                  <td className="px-4 py-4 text-slate-400" colSpan={4}>Chua co log test</td>
                 </tr>
               ) : (
                 rows.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-900/40">
                     <td className="px-4 py-3 text-slate-100">{r.protocol}</td>
-                    <td className="px-4 py-3 text-cyan-300">{formatMs(r.delay_node_to_gateway_ms)}</td>
+                    <td className="px-4 py-3 text-cyan-300">{r.device_name || '-'}</td>
                     <td className="px-4 py-3 text-emerald-300">{formatMs(r.delay_gateway_to_server_ms)}</td>
-                    <td className="px-4 py-3 text-blue-300">{formatMs(r.delay_node_to_server_ms)}</td>
                     <td className="px-4 py-3 text-slate-200">{formatTime(r.time_test)}</td>
                   </tr>
                 ))

@@ -184,14 +184,13 @@ def ensure_test_logs_table(engine: Engine) -> None:
                   `message` TEXT NULL,
                                     `node_id_len` INT NULL,
                   `node_id` VARCHAR(128) NOT NULL,
+                  `device_name` VARCHAR(128) NULL,
                                     `gateway_id_len` INT NULL,
                   `gateway_id` VARCHAR(128) NOT NULL,
                   `event_timestamp_ms` BIGINT NULL,
                   `gateway_timestamp_ms` BIGINT NULL,
                   `mark_time_ms` BIGINT NOT NULL,
-                  `delay_node_to_gateway_ms` BIGINT NULL,
                   `delay_gateway_to_server_ms` BIGINT NULL,
-                  `delay_node_to_server_ms` BIGINT NULL,
                   `rssi` INT NULL,
                   `src_mac` VARCHAR(17) NULL,
                   `topic` VARCHAR(255) NULL,
@@ -206,7 +205,8 @@ def ensure_test_logs_table(engine: Engine) -> None:
         for col_name, ddl in (
             ("message_len", "ALTER TABLE `test_logs` ADD COLUMN `message_len` INT NULL AFTER `version`"),
             ("node_id_len", "ALTER TABLE `test_logs` ADD COLUMN `node_id_len` INT NULL AFTER `message`"),
-            ("gateway_id_len", "ALTER TABLE `test_logs` ADD COLUMN `gateway_id_len` INT NULL AFTER `node_id`"),
+            ("device_name", "ALTER TABLE `test_logs` ADD COLUMN `device_name` VARCHAR(128) NULL AFTER `node_id`"),
+            ("gateway_id_len", "ALTER TABLE `test_logs` ADD COLUMN `gateway_id_len` INT NULL AFTER `device_name`"),
         ):
             r = conn.execute(
                 text(
@@ -220,4 +220,18 @@ def ensure_test_logs_table(engine: Engine) -> None:
             )
             if (r.scalar() or 0) == 0:
                 conn.execute(text(ddl))
+
+        for col_name in ("delay_node_to_gateway_ms", "delay_node_to_server_ms"):
+            r = conn.execute(
+                text(
+                    f"""
+                    SELECT COUNT(*) FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'test_logs'
+                      AND COLUMN_NAME = '{col_name}'
+                    """
+                )
+            )
+            if (r.scalar() or 0) > 0:
+                conn.execute(text(f"ALTER TABLE `test_logs` DROP COLUMN `{col_name}`"))
     logger.info("db_migrate: ensure_test_logs_table OK")

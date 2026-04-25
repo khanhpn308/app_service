@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.models.device import Device
 from app.models.test_log import TestLog
 
 
@@ -79,10 +80,9 @@ class TestService:
 
         event_ts = decoded.get("event_timestamp_ms")
         gateway_ts = decoded.get("gateway_timestamp_ms")
-
         delay_gateway_to_server = None
-        delay_node_to_gateway = None
-        delay_node_to_server = None
+        device_name = str(decoded.get("device_name") or "").strip() or None
+        device_id_int = None
 
         try:
             gateway_ts_int = int(gateway_ts) if gateway_ts is not None else None
@@ -93,16 +93,27 @@ class TestService:
 
         try:
             event_ts_int = int(event_ts) if event_ts is not None else None
-            if gateway_ts_int is not None and event_ts_int is not None:
-                delay_node_to_gateway = gateway_ts_int - event_ts_int
         except Exception:
             event_ts_int = None
 
-        if delay_gateway_to_server is not None and delay_node_to_gateway is not None:
-            delay_node_to_server = delay_gateway_to_server + delay_node_to_gateway
+        try:
+            device_id_int = int(decoded.get("device_id")) if decoded.get("device_id") is not None else None
+        except Exception:
+            device_id_int = None
 
         with self._session_factory() as db:
             db: Session
+            device = None
+            if device_name is None and topic:
+                device = db.query(Device).filter(Device.topic == topic).first()
+            if device is None and device_name is None and device_id_int is not None:
+                device = db.query(Device).filter(Device.device_id == device_id_int).first()
+            if device is not None:
+                device_name = str(device.devicename or "").strip() or None
+            if device_name is None:
+                # Final fallback for display when registry name is unavailable.
+                device_name = node_id
+
             row = TestLog(
                 protocol=protocol,
                 version=decoded.get("version"),
@@ -110,14 +121,13 @@ class TestService:
                 message=str(decoded.get("message") or ""),
                 node_id_len=decoded.get("node_id_len"),
                 node_id=node_id,
+                device_name=device_name,
                 gateway_id_len=decoded.get("gateway_id_len"),
                 gateway_id=gateway_id,
                 event_timestamp_ms=event_ts_int,
                 gateway_timestamp_ms=gateway_ts_int,
                 mark_time_ms=t_server_receive_ms,
-                delay_node_to_gateway_ms=delay_node_to_gateway,
                 delay_gateway_to_server_ms=delay_gateway_to_server,
-                delay_node_to_server_ms=delay_node_to_server,
                 rssi=decoded.get("rssi"),
                 src_mac=decoded.get("src_mac"),
                 topic=topic,
