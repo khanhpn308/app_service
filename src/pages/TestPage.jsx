@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Send, RefreshCw, FlaskConical } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { Switch } from '@/components/ui/switch';
 
 const PROTOCOLS = ['websocket'];
 
@@ -178,26 +179,16 @@ export default function TestPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <label className="inline-flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600">
+          <div className="inline-flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600">
             <span className="text-sm text-slate-200">Switch</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={enabled}
+            <Switch
+              checked={enabled}
               disabled={saving}
-              onClick={() => saveConfig(!enabled)}
-              className={`relative h-6 w-11 rounded-full transition-colors ${
-                enabled ? 'bg-emerald-500' : 'bg-slate-600'
-              } disabled:opacity-50`}
-            >
-              <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                  enabled ? 'translate-x-5' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
+              onCheckedChange={(checked) => saveConfig(checked)}
+              className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-600"
+            />
             <span className="text-sm text-slate-300">{enabled ? 'ON' : 'OFF'}</span>
-          </label>
+          </div>
 
           <button
             type="button"
