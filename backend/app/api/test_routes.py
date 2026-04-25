@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from decimal import Decimal
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -15,6 +16,19 @@ from app.models.user import User
 
 
 router = APIRouter(prefix="/test", tags=["test"])
+
+
+def _to_int(v):
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, (int, Decimal)):
+        return int(v)
+    try:
+        return int(v)
+    except Exception:
+        return None
 
 
 class TestConfigPayload(BaseModel):
@@ -109,23 +123,28 @@ def list_test_logs(
     rows = db.query(TestLog).order_by(TestLog.id.desc()).limit(limit).all()
     items = []
     for r in rows:
-        ts_ms = int(r.mark_time_ms)
+        ts_ms = _to_int(r.mark_time_ms)
+        if ts_ms is None:
+            continue
+        delay_ng = _to_int(r.delay_node_to_gateway_ms)
+        delay_gs = _to_int(r.delay_gateway_to_server_ms)
+        delay_ns = _to_int(r.delay_node_to_server_ms)
         items.append(
             {
-                "id": r.id,
+                "id": _to_int(r.id),
                 "protocol": r.protocol,
-                "version": r.version,
+                "version": _to_int(r.version),
                 "message": r.message,
                 "node_id": r.node_id,
                 "gateway_id": r.gateway_id,
-                "event_timestamp_ms": r.event_timestamp_ms,
-                "gateway_timestamp_ms": r.gateway_timestamp_ms,
+                "event_timestamp_ms": _to_int(r.event_timestamp_ms),
+                "gateway_timestamp_ms": _to_int(r.gateway_timestamp_ms),
                 "mark_time_ms": ts_ms,
                 "time_test": datetime.fromtimestamp(ts_ms / 1000, tz=UTC).isoformat(),
-                "delay_node_to_gateway_ms": r.delay_node_to_gateway_ms,
-                "delay_gateway_to_server_ms": r.delay_gateway_to_server_ms,
-                "delay_node_to_server_ms": r.delay_node_to_server_ms,
-                "rssi": r.rssi,
+                "delay_node_to_gateway_ms": delay_ng,
+                "delay_gateway_to_server_ms": delay_gs,
+                "delay_node_to_server_ms": delay_ns,
+                "rssi": _to_int(r.rssi),
                 "src_mac": r.src_mac,
                 "topic": r.topic,
             }

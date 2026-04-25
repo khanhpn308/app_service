@@ -1,9 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, RefreshCw, FlaskConical } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { Switch } from '@/components/ui/switch';
 
 const PROTOCOLS = ['websocket'];
+/** Số log mới nhất hiển thị ban đầu; mỗi lần kéo xuống cuối bảng thì tải thêm một “trang”. */
+const LOG_PAGE = 20;
+const LOG_FETCH_LIMIT = 100;
 
 function formatTime(v) {
   if (!v) return '';
@@ -25,28 +28,53 @@ export default function TestPage() {
   const [message, setMessage] = useState('');
 
   const [logs, setLogs] = useState([]);
+  const [visibleCount, setVisibleCount] = useState(LOG_PAGE);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
+  const prevHeadLogIdRef = useRef(null);
+  const logScrollRef = useRef(null);
+
+  const fetchLogs = useCallback(async () => {
+    const logRes = await apiFetch(`/api/test/logs?limit=${LOG_FETCH_LIMIT}`);
+    setLogs(Array.isArray(logRes?.items) ? logRes.items : []);
+  }, []);
 
   const loadAll = async () => {
     setError('');
     setLoading(true);
+    const [cfgRes, logsRes] = await Promise.allSettled([
+      apiFetch('/api/test/config'),
+      apiFetch(`/api/test/logs?limit=${LOG_FETCH_LIMIT}`),
+    ]);
+
     try {
-      const [cfg, logRes] = await Promise.all([
-        apiFetch('/api/test/config'),
-        apiFetch('/api/test/logs?limit=100'),
-      ]);
-      setEnabled(Boolean(cfg?.enabled));
-      setProtocol(String(cfg?.protocol || 'websocket'));
-      setGatewayId(String(cfg?.gateway_id || ''));
-      setNodeId(String(cfg?.node_id || ''));
-      setMessage(String(cfg?.message || ''));
-      setLogs(Array.isArray(logRes?.items) ? logRes.items : []);
-    } catch (err) {
-      setError(err?.message || 'Khong tai duoc du lieu test');
+      if (cfgRes.status === 'fulfilled') {
+        const cfg = cfgRes.value;
+        setEnabled(Boolean(cfg?.enabled));
+        setProtocol(String(cfg?.protocol || 'websocket'));
+        setGatewayId(String(cfg?.gateway_id || ''));
+        setNodeId(String(cfg?.node_id || ''));
+        setMessage(String(cfg?.message || ''));
+      }
+
+      if (logsRes.status === 'fulfilled') {
+        const logRes = logsRes.value;
+        setLogs(Array.isArray(logRes?.items) ? logRes.items : []);
+      }
+
+      const errs = [];
+      if (cfgRes.status === 'rejected') {
+        errs.push(`Config: ${cfgRes.reason?.message || 'request failed'}`);
+      }
+      if (logsRes.status === 'rejected') {
+        errs.push(`Logs: ${logsRes.reason?.message || 'request failed'}`);
+      }
+      if (errs.length > 0) {
+        setError(errs.join(' | '));
+      }
     } finally {
       setLoading(false);
     }
@@ -54,7 +82,47 @@ export default function TestPage() {
 
   useEffect(() => {
     loadAll();
-  }, []);
+
+    const timer = setInterval(() => {
+      fetchLogs().catch(() => {
+        // Giữ dữ liệu bảng hiện tại nếu poll lỗi.
+      });
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [fetchLogs]);
+
+  /** Log mới ở đầu danh sách (API sort id desc) → chỉ hiện lại tối đa LOG_PAGE dòng mới nhất. */
+  useEffect(() => {
+    const headId = logs[0]?.id;
+    if (prevHeadLogIdRef.current != null && headId != null && headId !== prevHeadLogIdRef.current) {
+      setVisibleCount(Math.min(LOG_PAGE, logs.length));
+      if (logScrollRef.current) logScrollRef.current.scrollTop = 0;
+    }
+    if (headId != null) prevHeadLogIdRef.current = headId;
+    else if (logs.length === 0) prevHeadLogIdRef.current = null;
+  }, [logs]);
+
+  /** Không để visibleCount vượt quá số dòng thực tế. */
+  useEffect(() => {
+    if (logs.length === 0) {
+      setVisibleCount(LOG_PAGE);
+      return;
+    }
+    setVisibleCount((v) => Math.min(v, logs.length));
+  }, [logs.length]);
+
+  const handleLogTableScroll = useCallback(() => {
+    const el = logScrollRef.current;
+    if (!el) return;
+    const threshold = 32;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold;
+    if (!atBottom) return;
+    setVisibleCount((c) => {
+      if (c >= logs.length) return c;
+      return Math.min(c + LOG_PAGE, logs.length);
+    });
+  }, [logs.length]);
 
   const saveConfig = async (nextEnabled = enabled) => {
     setSaving(true);
@@ -95,6 +163,7 @@ export default function TestPage() {
         }),
       });
       setOk('Da gui payload test den gateway/node da chon');
+      await fetchLogs().catch(() => {});
     } catch (err) {
       setError(err?.message || 'Gui message that bai');
     } finally {
@@ -102,7 +171,7 @@ export default function TestPage() {
     }
   };
 
-  const rows = useMemo(() => logs, [logs]);
+  const rows = logs.slice(0, visibleCount);
 
   return (
     <div className="space-y-6">
@@ -212,11 +281,23 @@ export default function TestPage() {
       </div>
 
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-700 text-slate-300 text-sm">Logs</div>
-        <div className="overflow-x-auto">
+        <div className="px-4 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 text-slate-300 text-sm">
+          <span>Logs</span>
+          {!loading && logs.length > 0 && (
+            <span className="text-slate-500 text-xs">
+              Hien thi {rows.length} / {logs.length}
+              {visibleCount < logs.length ? ' — keo xuong de xem them' : ''}
+            </span>
+          )}
+        </div>
+        <div
+          ref={logScrollRef}
+          onScroll={handleLogTableScroll}
+          className="max-h-[min(70vh,520px)] overflow-x-auto overflow-y-auto"
+        >
           <table className="w-full">
-            <thead>
-              <tr className="bg-slate-900 border-b border-slate-700">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-slate-900 border-b border-slate-700 shadow-sm">
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Protocol</th>
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Delay node to gateway</th>
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Delay gateway to server</th>
