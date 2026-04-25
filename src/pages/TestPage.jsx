@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, RefreshCw, FlaskConical } from 'lucide-react';
 import { apiFetch } from '../lib/api';
-import { Switch } from '@/components/ui/switch';
+import { Switch } from '../components/ui/switch';
 
 const PROTOCOLS = ['websocket'];
 /** Số log mới nhất hiển thị ban đầu; mỗi lần kéo xuống cuối bảng thì tải thêm một “trang”. */
