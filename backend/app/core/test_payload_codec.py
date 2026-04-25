@@ -96,7 +96,8 @@ def encode_test_downlink_proto(
     gateway_id: str,
     node_id: str,
     message: str,
-    mark_time_ms: int,
+    server_mark_time_ms: int | None = None,
+    mark_time_ms: int | None = None,
     protocol: str,
 ) -> bytes:
     """
@@ -107,16 +108,22 @@ def encode_test_downlink_proto(
         string gateway_id = 1;
         string node_id = 2;
         string message = 3;
-        uint64 mark_time_ms = 4;
+        uint64 mark_time_ms = 4;  # server_mark_time_ms semantic
         string protocol = 5;
       }
     """
+    # Backward compatible with existing call-sites using `mark_time_ms`.
+    if server_mark_time_ms is None:
+        if mark_time_ms is None:
+            raise ValueError("server_mark_time_ms (or mark_time_ms) is required")
+        server_mark_time_ms = int(mark_time_ms)
+
     return b"".join(
         [
             _encode_len_field(1, gateway_id),
             _encode_len_field(2, node_id),
             _encode_len_field(3, message),
-            _encode_u64_field(4, mark_time_ms),
+            _encode_u64_field(4, int(server_mark_time_ms)),
             _encode_len_field(5, protocol),
         ]
     )

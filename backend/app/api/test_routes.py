@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 from decimal import Decimal
 from datetime import UTC, datetime
 from typing import Literal
@@ -92,23 +93,32 @@ def send_test_message(
     _: User = Depends(require_admin),
 ):
     mqtt = _get_mqtt(request)
-    mark_time_ms = int(time.time() * 1000)
+    gateway_id = body.gateway_id.strip()
+    node_id = body.node_id.strip()
+    if not gateway_id or not node_id:
+        raise HTTPException(status_code=422, detail="gateway_id and node_id must not be blank")
+
+    msg_id = uuid.uuid4().hex
+    # Stamp as late as possible (server egress) to reduce server-side skew in delay metrics.
+    server_mark_time_ms = time.time_ns() // 1_000_000
     payload = encode_test_downlink_proto(
-        gateway_id=body.gateway_id.strip(),
-        node_id=body.node_id.strip(),
+        gateway_id=gateway_id,
+        node_id=node_id,
         message=body.message,
-        mark_time_ms=mark_time_ms,
+        server_mark_time_ms=server_mark_time_ms,
         protocol=body.protocol,
     )
-    topic = f"gateway/{body.gateway_id.strip()}/node/{body.node_id.strip()}/downlink"
+    topic = f"gateway/{gateway_id}/node/{node_id}/downlink"
     info = mqtt.publish_binary(topic=topic, payload=payload, qos=0, retain=False)
     if not info.get("ok"):
         raise HTTPException(status_code=503, detail=info.get("error") or "publish failed")
 
     return {
         "ok": True,
+        "msg_id": msg_id,
         "topic": topic,
-        "mark_time_ms": mark_time_ms,
+        "server_mark_time_ms": server_mark_time_ms,
+        "mark_time_ms": server_mark_time_ms,
         "payload_hex": payload.hex(),
         "note": "payload uses protobuf binary format compatible with nanopb",
     }
