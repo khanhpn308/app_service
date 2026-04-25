@@ -256,6 +256,8 @@ class MqttSubscriber:
 
     def _on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:  # noqa: ARG002
         """Callback paho: decode UTF-8, thử pretty-print JSON, append vào deque."""
+        # Server receive timestamp: capture at callback entry for delay measurement.
+        server_receive_ms = time.time_ns() // 1_000_000
         try:
             payload_raw = msg.payload.decode("utf-8", errors="replace")
         except Exception:  # noqa: BLE001
@@ -270,6 +272,7 @@ class MqttSubscriber:
 
         decoded = decode_sensor_payload(str(msg.topic), bytes(msg.payload))
         if isinstance(decoded, dict):
+            decoded["server_receive_ms"] = server_receive_ms
             try:
                 payload = json.dumps(decoded, ensure_ascii=False)
             except Exception:  # noqa: BLE001

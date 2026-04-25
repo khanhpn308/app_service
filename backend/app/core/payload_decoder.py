@@ -438,7 +438,12 @@ def decode_sensor_payload(topic: str, payload: bytes) -> dict[str, Any]:
         "node_id": parsed.get("node_id"),
         "gateway_id": parsed.get("gateway_id"),
         "event_timestamp_ms": parsed.get("event_timestamp_ms"),
-        "gateway_timestamp_ms": parsed.get("gateway_timestamp_ms"),
+        # Gateway->Server delay pipeline accepts either legacy `gateway_timestamp_ms`
+        # or the newer `t_gateway_appended_ms` name from delaytest.md.
+        "gateway_timestamp_ms": _first_non_none(
+            parsed.get("gateway_timestamp_ms"),
+            parsed.get("t_gateway_appended_ms"),
+        ),
         "rssi": parsed.get("rssi"),
         "src_mac": parsed.get("src_mac"),
         "raw_hex": parsed.get("raw_hex", payload_bytes.hex()),
