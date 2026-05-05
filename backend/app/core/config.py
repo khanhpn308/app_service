@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     """
     Một class = một bộ cấu hình runtime.
 
-    Thuộc tính viết ``snake_case`` khớp tên biến môi trường (không phân biệt hoa thường theo quy ước Pydantic v2).
+    Thuộc tính viết ``snake_case`` 
+    khớp tên biến môi trường (không phân biệt hoa thường theo quy ước Pydantic v2).
     """
 
     model_config = SettingsConfigDict(

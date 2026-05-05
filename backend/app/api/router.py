@@ -14,6 +14,7 @@ from .health import router as health_router
 from .mqtt_routes import router as mqtt_router
 from .test_routes import router as test_router
 from .users_routes import router as users_router
+from .websocket_routes import router as websocket_router
 
 api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
@@ -23,3 +24,4 @@ api_router.include_router(auth_router)
 api_router.include_router(devices_router)
 api_router.include_router(authorizations_router)
 api_router.include_router(users_router)
+api_router.include_router(websocket_router)

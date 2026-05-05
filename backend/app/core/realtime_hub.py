@@ -1,9 +1,11 @@
 """
-Realtime hub cho WebSocket: broadcast dữ liệu MQTT đã chuẩn hóa tới frontend.
+Realtime hub cho WebSocket: broadcast dữ liệu MQTT đã chuẩn hóa tới frontend và quản lý
+kết nối WebSocket của thiết bị ESP32.
 
 Kênh hỗ trợ:
     - Global dashboard: ``/ws/global``
     - Device dashboard: ``/ws/devices/{device_id}``
+    - ESP32 uplink: ``/ws/esp32/{device_id}``
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ class RealtimeHub:
 
         self._global_clients: set[WebSocket] = set()
         self._device_clients: dict[str, set[WebSocket]] = defaultdict(set)
+        self._esp32_clients: dict[str, set[WebSocket]] = defaultdict(set)
         self._lock = asyncio.Lock()
 
     async def start(self) -> None:
@@ -49,8 +52,11 @@ class RealtimeHub:
             all_ws = set(self._global_clients)
             for group in self._device_clients.values():
                 all_ws.update(group)
+            for group in self._esp32_clients.values():
+                all_ws.update(group)
             self._global_clients.clear()
             self._device_clients.clear()
+            self._esp32_clients.clear()
 
         for ws in all_ws:
             try:
@@ -71,6 +77,13 @@ class RealtimeHub:
         async with self._lock:
             self._device_clients[key].add(websocket)
 
+    async def connect_esp32(self, websocket: WebSocket, device_id: str) -> None:
+        """Accept kết nối và thêm ESP32 vào nhóm client theo device_id."""
+        await websocket.accept()
+        key = str(device_id)
+        async with self._lock:
+            self._esp32_clients[key].add(websocket)
+
     async def disconnect_global(self, websocket: WebSocket) -> None:
         """Gỡ kết nối khỏi nhóm global khi client ngắt."""
         async with self._lock:
@@ -86,6 +99,43 @@ class RealtimeHub:
             group.discard(websocket)
             if not group:
                 self._device_clients.pop(key, None)
+
+    async def disconnect_esp32(self, websocket: WebSocket, device_id: str) -> None:
+        """Gỡ kết nối ESP32 khỏi nhóm client theo device_id."""
+        key = str(device_id)
+        async with self._lock:
+            group = self._esp32_clients.get(key)
+            if not group:
+                return
+            group.discard(websocket)
+            if not group:
+                self._esp32_clients.pop(key, None)
+
+    async def send_to_esp32(self, device_id: str, message: dict[str, Any]) -> int:
+        """Gửi JSON message tới các websocket ESP32 đang gắn với một device_id."""
+        key = str(device_id)
+        async with self._lock:
+            targets = set(self._esp32_clients.get(key, set()))
+
+        sent = 0
+        stale: list[WebSocket] = []
+        for ws in targets:
+            try:
+                await ws.send_json(message)
+                sent += 1
+            except Exception:  # noqa: BLE001
+                stale.append(ws)
+
+        if stale:
+            async with self._lock:
+                group = self._esp32_clients.get(key)
+                if group:
+                    for ws in stale:
+                        group.discard(ws)
+                    if not group:
+                        self._esp32_clients.pop(key, None)
+
+        return sent
 
     def publish_from_thread(self, message: dict[str, Any]) -> None:
         """

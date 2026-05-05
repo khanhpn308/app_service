@@ -60,6 +60,11 @@ async def lifespan(app: FastAPI):
     """
     await wait_for_db()
     Base.metadata.create_all(bind=engine)
+
+    """các hàm trong db_migrate: đảm bảo schema có các cột mới mà app hiện tại cần, 
+    thao tác với database bằng sql trực tiếp -> sử dụng engine thay vì session ORM.
+    ưu: kiểm soát tốt hơn, tốc độ tối ưu hơn
+    nhược: phải viết SQL thủ công, dễ lỗi hơn ORM."""
     ensure_user_expired_at_column(engine)
     ensure_device_user_device_asignment_id_column(engine)
     ensure_device_drop_last_reading_columns(engine)
@@ -67,11 +72,17 @@ async def lifespan(app: FastAPI):
     ensure_device_topic_column(engine)
     ensure_test_logs_table(engine)
     ensure_device_authorization_granted_by_varchar(engine)
+
+    """Sau khi schema đã sẵn sàng, dùng session ORM để seed dữ liệu mặc định và xử lý user hết hạn.
+    thao tác với database bằng python class model -> sử dụng session ORM.
+    ưu: Code sạch và dễ bảo trì, dễ viết.
+    Nhược: tốc độ kém hơn sql thuần túy, kiểm soát kèm hơn"""
     with SessionLocal() as db:
         ensure_default_admin(db)
         ensure_default_devices(db)
         deactivate_expired_users(db)
 
+    
     influx = InfluxService(
         enabled=settings.influx_enabled,
         url=settings.influx_url,
