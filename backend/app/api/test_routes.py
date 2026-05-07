@@ -35,14 +35,15 @@ def _to_int(v):
 
 class TestConfigPayload(BaseModel):
     enabled: bool
-    protocol: Literal["websocket"] = "websocket"
+    protocol: Literal["mqtt", "websocket"] = "mqtt"
     gateway_id: str = Field(default="", max_length=128)
     node_id: str = Field(default="", max_length=128)
+    device_id: str = Field(default="", max_length=128)
     message: str = Field(default="", max_length=500)
 
 
 class TestSendPayload(BaseModel):
-    protocol: Literal["websocket"] = "websocket"
+    protocol: Literal["mqtt"] = "mqtt"
     gateway_id: str = Field(..., min_length=1, max_length=128)
     node_id: str = Field(..., min_length=1, max_length=128)
     message: str = Field(..., min_length=1, max_length=500)
@@ -83,6 +84,7 @@ def update_test_config(
         protocol=body.protocol,
         gateway_id=body.gateway_id,
         node_id=body.node_id,
+        device_id=body.device_id,
         message=body.message,
     )
 
@@ -94,6 +96,8 @@ def send_test_message(
     _: User = Depends(require_admin),
 ):
     mqtt = _get_mqtt(request)
+    if body.protocol != "mqtt":
+        raise HTTPException(status_code=422, detail="send is only supported for mqtt test mode")
     gateway_id = body.gateway_id.strip()
     node_id = body.node_id.strip()
     if not gateway_id or not node_id:
@@ -129,10 +133,21 @@ def send_test_message(
 def list_test_logs(
     limit: int = Query(default=100, ge=1, le=1000),
     device_name: str | None = Query(default=None, max_length=128),
+    protocol: str | None = Query(default=None, max_length=32),
+    device_id: str | None = Query(default=None, max_length=128),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
     q = db.query(TestLog)
+    # Filter by protocol if provided (e.g. "websocket" or "mqtt").
+    if protocol:
+        q = q.filter(TestLog.protocol == protocol)
+
+    # Filter by device_id (matches TestLog.node_id for websocket/mqtt test entries).
+    if device_id:
+        q = q.filter(func.coalesce(TestLog.node_id, "") == str(device_id).strip())
+
+    # Backwards-compatible device_name search for display name matching.
     search = (device_name or "").strip()
     if search:
         q = q.filter(func.lower(func.coalesce(TestLog.device_name, "")).like(f"%{search.lower()}%"))

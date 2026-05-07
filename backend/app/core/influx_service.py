@@ -134,6 +134,8 @@ class InfluxService:
         # Chấp nhận nhiều alias để tương thích payload template cũ/mới.
         temperature = _pick_metric(payload, "temperature", "temp", "temp_c", "temperature_c")
         vibration = _pick_metric(payload, "vibration", "vibration_mms", "vibrationMmS", "vib")
+        x_coord = _pick_metric(payload, "x", "longitude", "lon")
+        y_coord = _pick_metric(payload, "y", "latitude", "lat")
         voltage = _pick_metric(payload, "voltage", "volt", "v")
         current = _pick_metric(payload, "current", "ampere", "amps", "a")
 
@@ -146,12 +148,21 @@ class InfluxService:
             elif sensor_type == "power" and voltage is None and current is None:
                 voltage = generic_value
 
+        if sensor_type == "gps" and x_coord is not None and y_coord is None:
+            y_coord = generic_value
+
         wrote = False
         if temperature is not None:
             point = point.field("temperature", temperature)
             wrote = True
         if vibration is not None:
             point = point.field("vibration", vibration)
+            wrote = True
+        if x_coord is not None:
+            point = point.field("x", x_coord)
+            wrote = True
+        if y_coord is not None:
+            point = point.field("y", y_coord)
             wrote = True
         if voltage is not None:
             point = point.field("voltage", voltage)
@@ -193,7 +204,7 @@ class InfluxService:
 from(bucket: {json.dumps(self._bucket)})
   |> range(start: -{minutes}m)
   |> filter(fn: (r) => r._measurement == {json.dumps(self._measurement)}){filter_device}
-  |> filter(fn: (r) => r._field == "temperature" or r._field == "vibration" or r._field == "voltage" or r._field == "current")
+    |> filter(fn: (r) => r._field == "temperature" or r._field == "vibration" or r._field == "x" or r._field == "y" or r._field == "voltage" or r._field == "current")
   |> pivot(rowKey:["_time", "device_id", "sensor_type", "topic"], columnKey:["_field"], valueColumn:"_value")
   |> sort(columns:["_time"], desc: false)
 '''
@@ -218,6 +229,8 @@ from(bucket: {json.dumps(self._bucket)})
                         "topic": str(values.get("topic") or ""),
                         "temperature": values.get("temperature"),
                         "vibration": values.get("vibration"),
+                        "x": values.get("x"),
+                        "y": values.get("y"),
                         "voltage": values.get("voltage"),
                         "current": values.get("current"),
                     }

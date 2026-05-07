@@ -20,7 +20,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from app.core.test_payload_codec import decode_test_uplink_binary
+from app.core.test_payload_codec import decode_coordinates_data_proto, decode_test_uplink_binary
 
 
 MIN_REASONABLE_EPOCH_S = 946684800  # 2000-01-01T00:00:00Z
@@ -116,6 +116,10 @@ def _normalize_sensor_type(raw_sensor_type: Any) -> str:
     """Chuẩn hóa tên loại cảm biến về bộ chuẩn: temperature, vibration, power."""
     if raw_sensor_type is None:
         return ""
+    if isinstance(raw_sensor_type, (int, float)):
+        if int(raw_sensor_type) == 1:
+            return "gps"
+        return f"type_{int(raw_sensor_type)}"
     s = str(raw_sensor_type).strip().lower()
     if not s:
         return ""
@@ -133,6 +137,7 @@ def _normalize_sensor_type(raw_sensor_type: Any) -> str:
         "power": "power",
         "electric": "power",
         "dien": "power",
+        "gps": "gps",
     }
     return aliases.get(s, s)
 
@@ -336,26 +341,31 @@ def decode_sensor_payload(topic: str, payload: bytes) -> dict[str, Any]:
         raw = json.loads(text)
         parsed = raw if isinstance(raw, dict) else {"value": raw}
     except Exception:  # noqa: BLE001
-        # 2) Fallback: test uplink binary layout
+        # 2) Fallback: protobuf coordinates_data của ESP32
         try:
-            parsed = decode_test_uplink_binary(payload_bytes)
-            parsed["decode_format"] = "test-uplink-binary"
+            parsed = decode_coordinates_data_proto(payload_bytes)
+            parsed["decode_format"] = "coordinates-data-proto"
         except Exception:
-            # 3) Fallback: thử protobuf test schema (SimpleSensor)
+            # 3) Fallback: test uplink binary layout
             try:
-                parsed = _decode_simple_sensor_proto(payload_bytes)
-                parsed["decode_format"] = "protobuf-simple-sensor"
+                parsed = decode_test_uplink_binary(payload_bytes)
+                parsed["decode_format"] = "test-uplink-binary"
             except Exception:
-                # 4) Fallback tiếp: giải mã nhị phân theo khung NanoPB template
+                # 4) Fallback: thử protobuf test schema (SimpleSensor)
                 try:
-                    parsed = _decode_nanopb_template(payload_bytes)
-                    parsed["decode_format"] = "nanopb-template"
-                except Exception as exc:  # noqa: BLE001
-                    parsed = {
-                        "decode_format": "raw-bytes",
-                        "decode_error": str(exc),
-                        "raw_hex": payload_bytes.hex(),
-                    }
+                    parsed = _decode_simple_sensor_proto(payload_bytes)
+                    parsed["decode_format"] = "protobuf-simple-sensor"
+                except Exception:
+                    # 5) Fallback tiếp: giải mã nhị phân theo khung NanoPB template
+                    try:
+                        parsed = _decode_nanopb_template(payload_bytes)
+                        parsed["decode_format"] = "nanopb-template"
+                    except Exception as exc:  # noqa: BLE001
+                        parsed = {
+                            "decode_format": "raw-bytes",
+                            "decode_error": str(exc),
+                            "raw_hex": payload_bytes.hex(),
+                        }
 
     # Chuẩn hóa các trường lõi
     topic_device_id = _extract_device_id_from_topic(topic)
@@ -387,6 +397,8 @@ def decode_sensor_payload(topic: str, payload: bytes) -> dict[str, Any]:
         parsed.get("vibrationMmS"),
         parsed.get("vib"),
     )
+    x_coord = _first_non_none(parsed.get("x"), parsed.get("longitude"), parsed.get("lon"))
+    y_coord = _first_non_none(parsed.get("y"), parsed.get("latitude"), parsed.get("lat"))
     voltage = _first_non_none(
         parsed.get("voltage"),
         parsed.get("volt"),
@@ -409,6 +421,8 @@ def decode_sensor_payload(topic: str, payload: bytes) -> dict[str, Any]:
             sensor_type = "temperature"
         elif has_vib:
             sensor_type = "vibration"
+        elif x_coord is not None and y_coord is not None:
+            sensor_type = "gps"
 
     # Nhiều template mới gửi payload chung dạng {sensor_type, value}.
     value = _first_non_none(parsed.get("value"), parsed.get("reading"), parsed.get("measurement"))
@@ -452,8 +466,11 @@ def decode_sensor_payload(topic: str, payload: bytes) -> dict[str, Any]:
         "sequence": parsed.get("sequence"),
         "timestamp_ms": parsed.get("timestamp_ms"),
         "vibration": vibration,
+        "x": x_coord,
+        "y": y_coord,
         "voltage": voltage,
         "current": current,
+        "payload_type": parsed.get("type"),
         "raw": parsed,
     }
     return out

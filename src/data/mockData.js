@@ -96,6 +96,19 @@ export const mockDevices = [
     password: 'light_ctrl_2024',
     value: 75,
     unit: '%'
+  },
+  {
+    id: 'DEV007',
+    name: 'GPS Tracker G',
+    type: 'GPS',
+    status: 'online',
+    location: 'Fleet Management',
+    lastUpdate: '1 minute ago',
+    password: 'gps_tracker_2024',
+    value: 0,
+    unit: '',
+    x: 10.7769,
+    y: 106.7009
   }
 ];
 

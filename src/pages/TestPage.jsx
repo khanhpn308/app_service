@@ -3,7 +3,7 @@ import { Send, RefreshCw, FlaskConical } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { Switch } from '../components/ui/switch';
 
-const PROTOCOLS = ['websocket'];
+const PROTOCOLS = ['mqtt', 'websocket'];
 /** Số log mới nhất hiển thị ban đầu; mỗi lần kéo xuống cuối bảng thì tải thêm một “trang”. */
 const LOG_PAGE = 20;
 const LOG_FETCH_LIMIT = 100;
@@ -22,9 +22,10 @@ function formatMs(v) {
 
 export default function TestPage() {
   const [enabled, setEnabled] = useState(false);
-  const [protocol, setProtocol] = useState('websocket');
+  const [protocol, setProtocol] = useState('mqtt');
   const [gatewayId, setGatewayId] = useState('');
   const [nodeId, setNodeId] = useState('');
+  const [deviceId, setDeviceId] = useState('');
   const [message, setMessage] = useState('');
 
   const [logs, setLogs] = useState([]);
@@ -38,49 +39,57 @@ export default function TestPage() {
   const prevHeadLogIdRef = useRef(null);
   const logScrollRef = useRef(null);
 
-  const fetchLogs = useCallback(async () => {
+  const fetchLogsBy = useCallback(async (nextProtocol, nextDeviceId, nextDeviceNameFilter) => {
     const q = new URLSearchParams({ limit: String(LOG_FETCH_LIMIT) });
-    const search = deviceNameFilter.trim();
-    if (search) q.set('device_name', search);
+    // If websocket protocol + deviceId provided, query by protocol+device_id for automatic filter.
+    if (nextProtocol === 'websocket' && String(nextDeviceId || '').trim()) {
+      q.set('protocol', 'websocket');
+      q.set('device_id', String(nextDeviceId || '').trim());
+    } else {
+      const search = String(nextDeviceNameFilter || '').trim();
+      if (search) q.set('device_name', search);
+    }
     const logRes = await apiFetch(`/api/test/logs?${q.toString()}`);
     setLogs(Array.isArray(logRes?.items) ? logRes.items : []);
-  }, [deviceNameFilter]);
+  }, []);
 
-  const loadAll = async () => {
+  const fetchLogs = useCallback(async () => {
+    await fetchLogsBy(protocol, deviceId, deviceNameFilter);
+  }, [fetchLogsBy, protocol, deviceId, deviceNameFilter]);
+
+  const loadConfig = async () => {
     setError('');
-    setLoading(true);
-    const q = new URLSearchParams({ limit: String(LOG_FETCH_LIMIT) });
-    const search = deviceNameFilter.trim();
-    if (search) q.set('device_name', search);
-    const [cfgRes, logsRes] = await Promise.allSettled([
-      apiFetch('/api/test/config'),
-      apiFetch(`/api/test/logs?${q.toString()}`),
-    ]);
-
     try {
-      if (cfgRes.status === 'fulfilled') {
-        const cfg = cfgRes.value;
+      const cfg = await apiFetch('/api/test/config');
+      if (cfg) {
         setEnabled(Boolean(cfg?.enabled));
-        setProtocol(String(cfg?.protocol || 'websocket'));
+        setProtocol(String(cfg?.protocol || 'mqtt'));
         setGatewayId(String(cfg?.gateway_id || ''));
         setNodeId(String(cfg?.node_id || ''));
+        setDeviceId(String(cfg?.device_id || ''));
         setMessage(String(cfg?.message || ''));
       }
+      return cfg;
+    } catch (err) {
+      setError(err?.message || 'Load failed');
+      return null;
+    }
+  };
 
-      if (logsRes.status === 'fulfilled') {
-        const logRes = logsRes.value;
-        setLogs(Array.isArray(logRes?.items) ? logRes.items : []);
-      }
-
-      const errs = [];
-      if (cfgRes.status === 'rejected') {
-        errs.push(`Config: ${cfgRes.reason?.message || 'request failed'}`);
-      }
-      if (logsRes.status === 'rejected') {
-        errs.push(`Logs: ${logsRes.reason?.message || 'request failed'}`);
-      }
-      if (errs.length > 0) {
-        setError(errs.join(' | '));
+  const refreshAll = async () => {
+    setLoading(true);
+    try {
+      const cfg = await apiFetch('/api/test/config');
+      if (cfg) {
+        setEnabled(Boolean(cfg?.enabled));
+        setProtocol(String(cfg?.protocol || 'mqtt'));
+        setGatewayId(String(cfg?.gateway_id || ''));
+        setNodeId(String(cfg?.node_id || ''));
+        setDeviceId(String(cfg?.device_id || ''));
+        setMessage(String(cfg?.message || ''));
+        await fetchLogsBy(String(cfg?.protocol || 'mqtt'), String(cfg?.device_id || ''), deviceNameFilter);
+      } else {
+        await fetchLogs();
       }
     } finally {
       setLoading(false);
@@ -88,16 +97,30 @@ export default function TestPage() {
   };
 
   useEffect(() => {
-    loadAll();
+    (async () => {
+      setLoading(true);
+      try {
+        const cfg = await loadConfig();
+        if (cfg) {
+          await fetchLogsBy(String(cfg?.protocol || 'mqtt'), String(cfg?.device_id || ''), deviceNameFilter);
+        }
+      } finally {
+        setLoading(false);
+      }
+    })();
 
+    return undefined;
+  }, []);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       fetchLogs().catch(() => {
-        // Giữ dữ liệu bảng hiện tại nếu poll lỗi.
+        // Keep existing table if poll fails.
       });
     }, 3000);
 
     return () => clearInterval(timer);
-  }, [fetchLogs, deviceNameFilter]);
+  }, [fetchLogs]);
 
   /** Log mới ở đầu danh sách (API sort id desc) → chỉ hiện lại tối đa LOG_PAGE dòng mới nhất. */
   useEffect(() => {
@@ -136,18 +159,25 @@ export default function TestPage() {
     setError('');
     setOk('');
     try {
+      const nextProtocol = protocol === 'websocket' ? 'websocket' : 'mqtt';
       await apiFetch('/api/test/config', {
         method: 'PUT',
         body: JSON.stringify({
           enabled: Boolean(nextEnabled),
-          protocol,
-          gateway_id: gatewayId.trim(),
-          node_id: nodeId.trim(),
-          message,
+          protocol: nextProtocol,
+          gateway_id: nextProtocol === 'mqtt' ? gatewayId.trim() : '',
+          node_id: nextProtocol === 'mqtt' ? nodeId.trim() : '',
+          device_id: nextProtocol === 'websocket' ? deviceId.trim() : '',
+          message: nextProtocol === 'mqtt' ? message : '',
         }),
       });
       setEnabled(Boolean(nextEnabled));
       setOk('Da luu cau hinh test');
+      try {
+        await fetchLogs();
+      } catch (e) {
+        // ignore
+      }
     } catch (err) {
       setError(err?.message || 'Luu cau hinh that bai');
     } finally {
@@ -156,6 +186,7 @@ export default function TestPage() {
   };
 
   const sendMessage = async () => {
+    if (protocol !== 'mqtt') return;
     setSending(true);
     setError('');
     setOk('');
@@ -180,6 +211,10 @@ export default function TestPage() {
 
   const rows = logs.slice(0, visibleCount);
 
+  const isMqtt = protocol === 'mqtt';
+  const isWebsocket = protocol === 'websocket';
+  const delayLabel = isWebsocket ? 'Delay device to server' : 'Delay gateway to server';
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -189,7 +224,7 @@ export default function TestPage() {
         </div>
         <button
           type="button"
-          onClick={loadAll}
+          onClick={refreshAll}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700"
         >
           <RefreshCw className="h-4 w-4" />
@@ -220,38 +255,55 @@ export default function TestPage() {
             </select>
           </label>
 
-          <label className="space-y-1">
-            <span className="text-sm text-slate-300">Gateway ID</span>
-            <input
-              type="text"
-              value={gatewayId}
-              onChange={(e) => setGatewayId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
-              placeholder="tempt-01"
-            />
-          </label>
+          {isMqtt && (
+            <>
+              <label className="space-y-1">
+                <span className="text-sm text-slate-300">Gateway ID</span>
+                <input
+                  type="text"
+                  value={gatewayId}
+                  onChange={(e) => setGatewayId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
+                  placeholder="tempt-01"
+                />
+              </label>
 
-          <label className="space-y-1">
-            <span className="text-sm text-slate-300">Node ID</span>
-            <input
-              type="text"
-              value={nodeId}
-              onChange={(e) => setNodeId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
-              placeholder="node_01"
-            />
-          </label>
+              <label className="space-y-1">
+                <span className="text-sm text-slate-300">Node ID</span>
+                <input
+                  type="text"
+                  value={nodeId}
+                  onChange={(e) => setNodeId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
+                  placeholder="node_01"
+                />
+              </label>
 
-          <label className="space-y-1">
-            <span className="text-sm text-slate-300">Message</span>
-            <input
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
-              placeholder="hello from server"
-            />
-          </label>
+              <label className="space-y-1">
+                <span className="text-sm text-slate-300">Message</span>
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
+                  placeholder="hello from server"
+                />
+              </label>
+            </>
+          )}
+
+          {isWebsocket && (
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-sm text-slate-300">Device ID</span>
+              <input
+                type="text"
+                value={deviceId}
+                onChange={(e) => setDeviceId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
+                placeholder="101"
+              />
+            </label>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -278,7 +330,7 @@ export default function TestPage() {
           <button
             type="button"
             onClick={sendMessage}
-            disabled={sending || !gatewayId.trim() || !nodeId.trim() || !message.trim()}
+            disabled={!isMqtt || sending || !gatewayId.trim() || !nodeId.trim() || !message.trim()}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-50"
           >
             <Send className="h-4 w-4" />
@@ -316,7 +368,7 @@ export default function TestPage() {
               <tr className="bg-slate-900 border-b border-slate-700 shadow-sm">
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Protocol</th>
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Ten thiet bi</th>
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Delay gateway to server</th>
+                <th className="px-4 py-3 text-left text-slate-300 text-sm">{delayLabel}</th>
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Time test</th>
               </tr>
             </thead>

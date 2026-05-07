@@ -11,6 +11,7 @@ const normalizeDeviceType = (type) => {
   if (t === 'temperature' || t.includes('nhiệt')) return 'Temperature';
   if (t === 'power' || t.includes('công suất')) return 'Power';
   if (t === 'vibration' || t.includes('độ rung')) return 'Vibration';
+  if (t === 'gps') return 'GPS';
   return 'Temperature';
 };
 
@@ -178,7 +179,9 @@ const Devices = () => {
       const lastUpdate = d.lastUpdate ?? '—';
       const value = d.value ?? '—';
       const unit = d.unit ?? '';
-      return { ...d, id: String(id), name, type, location, lastUpdate, value, unit };
+      const x = d.x ?? '—';
+      const y = d.y ?? '—';
+      return { ...d, id: String(id), name, type, location, lastUpdate, value, unit, x, y };
     });
   }, [devices]);
 
@@ -282,9 +285,16 @@ const Devices = () => {
         {/* Current Value */}
         <div className="bg-slate-900 rounded-lg p-3 mb-4">
           <p className="text-slate-500 text-xs mb-1">Current Reading</p>
-          <p className="text-white font-bold text-2xl">
-            {device.value} <span className="text-slate-400 text-base">{device.unit}</span>
-          </p>
+          {device.type === 'GPS' ? (
+            <div className="text-white">
+              <p className="font-bold text-sm mb-1">X: <span className="text-blue-400">{device.x}</span></p>
+              <p className="font-bold text-sm">Y: <span className="text-blue-400">{device.y}</span></p>
+            </div>
+          ) : (
+            <p className="text-white font-bold text-2xl">
+              {device.value} <span className="text-slate-400 text-base">{device.unit}</span>
+            </p>
+          )}
         </div>
       </div>
 

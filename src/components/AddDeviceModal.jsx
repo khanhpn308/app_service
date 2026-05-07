@@ -17,6 +17,7 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
     { value: 'Temperature', label: 'Nhiệt độ (Temperature)' },
     { value: 'Power', label: 'Công suất (Power)' },
     { value: 'Vibration', label: 'Độ rung (Vibration)' },
+    { value: 'GPS', label: 'Định vị (GPS)' },
   ];
 
   const validateForm = () => {
@@ -63,7 +64,9 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
               ? 'V/A'
               : formData.type === 'Vibration'
                 ? 'mm/s'
-                : 'units';
+                : formData.type === 'GPS'
+                  ? ''
+                  : 'units';
 
         const created = await apiFetch('/api/devices', {
           method: 'POST',

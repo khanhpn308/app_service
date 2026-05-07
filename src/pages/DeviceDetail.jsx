@@ -48,6 +48,7 @@ function normalizeDeviceType(type) {
   if (t === 'temperature' || t.includes('nhiệt')) return 'Temperature';
   if (t === 'power' || t.includes('công suất')) return 'Power';
   if (t === 'vibration' || t.includes('độ rung')) return 'Vibration';
+  if (t === 'gps') return 'GPS';
   return 'Temperature';
 }
 
@@ -62,6 +63,11 @@ function getDeviceMetrics(type) {
   if (normalized === 'Vibration') {
     return [
       { key: 'vibration', title: 'Vibration (mm/s)', lineName: 'Vibration', color: '#10b981', icon: Waves },
+    ];
+  }
+  if (normalized === 'GPS') {
+    return [
+      { key: 'gps', title: 'GPS Coordinates', lineName: 'GPS', color: '#f59e0b', icon: MapPin, isGPS: true },
     ];
   }
   return [
@@ -125,6 +131,8 @@ function mapHistoryToSeries(item) {
     vibration: Number.isFinite(Number(item?.vibration)) ? Number(item.vibration) : 0,
     voltage: Number.isFinite(Number(item?.voltage)) ? Number(item.voltage) : 0,
     current: Number.isFinite(Number(item?.current)) ? Number(item.current) : 0,
+    x: Number.isFinite(Number(item?.x ?? item?.longitude)) ? Number(item.x ?? item.longitude) : 0,
+    y: Number.isFinite(Number(item?.y ?? item?.latitude)) ? Number(item.y ?? item.latitude) : 0,
   };
 }
 
@@ -310,6 +318,8 @@ const DeviceDetail = () => {
         const voltage = Number(msg.voltage);
         const temperature = Number(msg.temperature);
         const vibration = Number(msg.vibration ?? msg.vibration_mms ?? msg.vibrationMmS);
+        const x = Number(msg.x ?? msg.longitude);
+        const y = Number(msg.y ?? msg.latitude);
 
         setRealtimeSeries((prev) =>
           capPush(prev, {
@@ -318,6 +328,8 @@ const DeviceDetail = () => {
             voltage: Number.isFinite(voltage) ? voltage : 0,
             temperature: Number.isFinite(temperature) ? temperature : 0,
             vibration: Number.isFinite(vibration) ? vibration : 0,
+            x: Number.isFinite(x) ? x : 0,
+            y: Number.isFinite(y) ? y : 0,
           })
         );
       };
@@ -454,9 +466,16 @@ const DeviceDetail = () => {
             </div>
             <p className="text-slate-400 text-sm font-medium">Current Reading</p>
           </div>
-          <p className="text-white text-2xl font-bold">
-            {device.value} <span className="text-slate-400 text-base">{device.unit}</span>
-          </p>
+          {device.type === 'GPS' ? (
+            <div className="text-white">
+              <p className="text-sm mb-2">X: <span className="text-blue-400 font-bold text-lg">{apiDetail?.x ?? device.x ?? '—'}</span></p>
+              <p className="text-sm">Y: <span className="text-blue-400 font-bold text-lg">{apiDetail?.y ?? device.y ?? '—'}</span></p>
+            </div>
+          ) : (
+            <p className="text-white text-2xl font-bold">
+              {device.value} <span className="text-slate-400 text-base">{device.unit}</span>
+            </p>
+          )}
         </div>
       </div>
 
@@ -713,7 +732,9 @@ const DeviceDetail = () => {
                           {idx + 1}
                         </td>
                         <td className="px-6 py-4 text-white font-medium">
-                          {`T=${record.temperature.toFixed(2)}°C | Vb=${record.vibration.toFixed(2)}mm/s | U=${record.voltage.toFixed(2)}V | I=${record.current.toFixed(2)}A`}
+                              {device.type === 'GPS'
+                                ? `X=${record.x.toFixed(6)} | Y=${record.y.toFixed(6)}`
+                                : `T=${record.temperature.toFixed(2)}°C | Vb=${record.vibration.toFixed(2)}mm/s | U=${record.voltage.toFixed(2)}V | I=${record.current.toFixed(2)}A`}
                         </td>
                         <td className="px-6 py-4 text-slate-400 text-sm">
                           {record.timestamp}
@@ -812,6 +833,120 @@ const DeviceDetail = () => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {deviceMetrics.map((metric) => {
                   const Icon = metric.icon;
+                  
+                  // GPS metric render as scatter/coordinate plot
+                  if (metric.isGPS) {
+                    return (
+                      <div
+                        key={metric.key}
+                        className={`bg-slate-900 rounded-xl p-6 border border-slate-700 ${
+                          fullscreenMetric === metric.key ? 'fixed inset-4 z-[80] overflow-hidden' : ''
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-6">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-lg" style={{ backgroundColor: `${metric.color}33` }}>
+                              <Icon className="h-5 w-5" style={{ color: metric.color }} />
+                            </div>
+                            <div>
+                              <h4 className="text-white font-semibold">{metric.title}</h4>
+                              <p className="text-slate-400 text-sm">Location coordinates (X, Y)</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFullscreenMetric((prev) => (prev === metric.key ? null : metric.key))
+                            }
+                            className="p-2 rounded-lg border border-slate-600 hover:bg-slate-700 text-slate-200"
+                            title={fullscreenMetric === metric.key ? 'Thu nho bieu do' : 'Phong to bieu do'}
+                          >
+                            {fullscreenMetric === metric.key ? (
+                              <Minimize2 className="h-4 w-4" />
+                            ) : (
+                              <Maximize2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                        <div className={`bg-slate-800 rounded-lg p-4 overflow-auto ${
+                          fullscreenMetric === metric.key ? 'h-[500px]' : 'h-[260px]'
+                        }`}>
+                          {realtimeSeries.length === 0 ? (
+                            <div className="flex items-center justify-center h-full text-slate-400">
+                              <p>Chờ dữ liệu GPS...</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {/* GPS Scatter Plot */}
+                              <svg width="100%" height="100%" viewBox="0 0 400 300" className="border border-slate-700 rounded">
+                                <defs>
+                                  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#334155" strokeWidth="0.5"/>
+                                  </pattern>
+                                </defs>
+                                <rect width="400" height="300" fill="#0f172a" />
+                                <rect width="400" height="300" fill="url(#grid)" />
+                                
+                                {/* Axes */}
+                                <line x1="30" y1="270" x2="390" y2="270" stroke="#94a3b8" strokeWidth="1" />
+                                <line x1="30" y1="30" x2="30" y2="270" stroke="#94a3b8" strokeWidth="1" />
+                                
+                                {/* Data points */}
+                                {realtimeSeries.map((point, idx) => {
+                                  const minX = Math.min(...realtimeSeries.map(p => p.x));
+                                  const maxX = Math.max(...realtimeSeries.map(p => p.x));
+                                  const minY = Math.min(...realtimeSeries.map(p => p.y));
+                                  const maxY = Math.max(...realtimeSeries.map(p => p.y));
+                                  const rangeX = maxX - minX || 1;
+                                  const rangeY = maxY - minY || 1;
+                                  
+                                  const x = 30 + ((point.x - minX) / rangeX) * 360;
+                                  const y = 270 - ((point.y - minY) / rangeY) * 240;
+                                  const isLatest = idx === realtimeSeries.length - 1;
+                                  
+                                  return (
+                                    <g key={idx}>
+                                      <circle
+                                        cx={x}
+                                        cy={y}
+                                        r={isLatest ? 6 : 3}
+                                        fill={isLatest ? '#f59e0b' : '#3b82f6'}
+                                        opacity={0.7}
+                                      />
+                                      {isLatest && (
+                                        <circle
+                                          cx={x}
+                                          cy={y}
+                                          r={8}
+                                          fill="none"
+                                          stroke="#f59e0b"
+                                          strokeWidth="1.5"
+                                          opacity="0.5"
+                                        />
+                                      )}
+                                    </g>
+                                  );
+                                })}
+                              </svg>
+                              
+                              {/* Latest GPS data display */}
+                              {realtimeSeries.length > 0 && (
+                                <div className="bg-slate-900 rounded p-3 mt-3 border border-slate-700">
+                                  <p className="text-slate-400 text-xs mb-2">Latest Reading:</p>
+                                  <p className="text-white font-mono text-sm">
+                                    X: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].x.toFixed(6)}</span>, Y: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].y.toFixed(6)}</span>
+                                  </p>
+                                  <p className="text-slate-400 text-xs mt-1">Points: {realtimeSeries.length}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Regular line chart for other metrics
                   return (
                     <div
                       key={metric.key}

@@ -41,6 +41,7 @@ from app.models import device_authorization  # noqa: F401
 from app.models import test_log  # noqa: F401
 from app.models import user  # noqa: F401
 from app.models.base import Base
+from app.api.websocket_routes import router as websocket_router
 
 
 @asynccontextmanager
@@ -169,38 +170,11 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router, prefix="/api")
-
-    @app.websocket("/ws/global")
-    async def ws_global(websocket: WebSocket) -> None:
-        """WebSocket luồng realtime cho GlobalDashboard."""
-        hub = getattr(app.state, "realtime_hub", None)
-        if hub is None:
-            await websocket.close(code=1011)
-            return
-        await hub.connect_global(websocket)
-        try:
-            while True:
-                await websocket.receive_text()
-        except WebSocketDisconnect:
-            await hub.disconnect_global(websocket)
-        except Exception:
-            await hub.disconnect_global(websocket)
-
-    @app.websocket("/ws/devices/{device_id}")
-    async def ws_device(websocket: WebSocket, device_id: str) -> None:
-        """WebSocket luồng realtime cho dashboard theo từng thiết bị."""
-        hub = getattr(app.state, "realtime_hub", None)
-        if hub is None:
-            await websocket.close(code=1011)
-            return
-        await hub.connect_device(websocket, device_id)
-        try:
-            while True:
-                await websocket.receive_text()
-        except WebSocketDisconnect:
-            await hub.disconnect_device(websocket, device_id)
-        except Exception:
-            await hub.disconnect_device(websocket, device_id)
+    # Also expose websocket endpoints without /api prefix for existing clients.
+    app.include_router(websocket_router)
+    # WebSocket routes (/ws/global, /ws/devices/{device_id}, /ws/esp32/{device_id}) được define
+    # trong app/api/websocket_routes.py và auto-include vào api_router prefix=/api.
+    # Xem websocket_routes.py để tìm hiểu chi tiết flow + payload schema.
 
     return app
 
