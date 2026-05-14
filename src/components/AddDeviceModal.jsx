@@ -7,7 +7,9 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
     name: '',
     type: 'Temperature',
     location: '',
-    password: ''
+    password: '',
+    topic: '',
+    publishTopic: '',
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -78,6 +80,8 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
             user_device_asignment_id: 0,
             location: formData.location,
             device_type: formData.type,
+            topic: formData.topic.trim() || null,
+            publish_topic: formData.publishTopic.trim() || null,
           }),
         });
 
@@ -211,6 +215,34 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
                 {errors.password}
               </div>
             )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              MQTT Topic Nhan (optional)
+            </label>
+            <input
+              type="text"
+              name="topic"
+              value={formData.topic}
+              onChange={handleChange}
+              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              placeholder="devices/101/telemetry"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              MQTT Topic Gui (optional)
+            </label>
+            <input
+              type="text"
+              name="publishTopic"
+              value={formData.publishTopic}
+              onChange={handleChange}
+              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              placeholder="devices/101/downlink"
+            />
           </div>
 
           {/* Buttons */}

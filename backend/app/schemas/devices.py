@@ -34,6 +34,11 @@ class DeviceCreate(BaseModel):
         max_length=255,
         validation_alias=AliasChoices("topic", "mqtt_topic", "mqttTopic"),
     )
+    publish_topic: str | None = Field(
+        default=None,
+        max_length=255,
+        validation_alias=AliasChoices("publish_topic", "mqtt_publish_topic", "mqttPublishTopic"),
+    )
 
 
 class DevicePublic(BaseModel):
@@ -43,6 +48,7 @@ class DevicePublic(BaseModel):
     location: str | None = None
     device_type: str | None = None
     topic: str | None = None
+    publish_topic: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -66,6 +72,7 @@ class DeviceDetailPublic(BaseModel):
     location: str | None = None
     device_type: str | None = None
     topic: str | None = None
+    publish_topic: str | None = None
     user_device_asignment_id: int | None = None
     authorized_users: list[DeviceAuthorizedUser] = Field(default_factory=list)
 
@@ -96,6 +103,11 @@ class DeviceUpdate(BaseModel):
         max_length=255,
         validation_alias=AliasChoices("topic", "mqtt_topic", "mqttTopic"),
     )
+    publish_topic: str | None = Field(
+        default=None,
+        max_length=255,
+        validation_alias=AliasChoices("publish_topic", "mqtt_publish_topic", "mqttPublishTopic"),
+    )
 
 
 class DeviceTopicPublic(BaseModel):
@@ -105,6 +117,7 @@ class DeviceTopicPublic(BaseModel):
     devicename: str | None = None
     status: str | None = None
     topic: str | None = None
+    publish_topic: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -113,3 +126,4 @@ class DeviceTopicUpdate(BaseModel):
     """Body cập nhật topic MQTT theo thiết bị."""
 
     topic: str | None = Field(default=None, max_length=255)
+    publish_topic: str | None = Field(default=None, max_length=255)

@@ -71,6 +71,7 @@ def create_device(
         location=body.location,
         device_type=body.device_type,
         topic=body.topic,
+        publish_topic=body.publish_topic,
     )
     db.add(row)
     try:
@@ -122,6 +123,7 @@ def list_device_topics(
             devicename=r.devicename,
             status=r.status,
             topic=r.topic,
+            publish_topic=r.publish_topic,
         )
         for r in rows
     ]
@@ -140,20 +142,26 @@ def update_device_topic(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
+    data = body.model_dump(exclude_unset=True)
     old_topic = (row.topic or "").strip()
-    row.topic = (body.topic or "").strip() or None
+    if "topic" in data:
+        row.topic = (body.topic or "").strip() or None
+    if "publish_topic" in data:
+        row.publish_topic = (body.publish_topic or "").strip() or None
 
     db.commit()
     db.refresh(row)
 
-    new_topic = (row.topic or "").strip()
-    _sync_topic_runtime(request, old_topic, new_topic)
+    if "topic" in data:
+        new_topic = (row.topic or "").strip()
+        _sync_topic_runtime(request, old_topic, new_topic)
 
     return DeviceTopicPublic(
         device_id=row.device_id,
         devicename=row.devicename,
         status=row.status,
         topic=row.topic,
+        publish_topic=row.publish_topic,
     )
 
 

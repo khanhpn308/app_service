@@ -12,7 +12,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_admin
-from app.core.test_payload_codec import encode_test_downlink_proto
 from app.models.test_log import TestLog
 from app.models.user import User
 
@@ -104,15 +103,9 @@ def send_test_message(
         raise HTTPException(status_code=422, detail="gateway_id and node_id must not be blank")
 
     msg_id = uuid.uuid4().hex
-    # Stamp as late as possible (server egress) to reduce server-side skew in delay metrics.
     server_mark_time_ms = time.time_ns() // 1_000_000
-    payload = encode_test_downlink_proto(
-        gateway_id=gateway_id,
-        node_id=node_id,
-        message=body.message,
-        server_mark_time_ms=server_mark_time_ms,
-        protocol=body.protocol,
-    )
+    payload_text = str(body.message)
+    payload = payload_text.encode("utf-8")
     topic = f"gateway/{gateway_id}/node/{node_id}/downlink"
     info = mqtt.publish_binary(topic=topic, payload=payload, qos=0, retain=False)
     if not info.get("ok"):
@@ -122,10 +115,10 @@ def send_test_message(
         "ok": True,
         "msg_id": msg_id,
         "topic": topic,
-        "server_mark_time_ms": server_mark_time_ms,
-        "mark_time_ms": server_mark_time_ms,
+        "sent_at_ms": server_mark_time_ms,
+        "payload": payload_text,
         "payload_hex": payload.hex(),
-        "note": "payload uses protobuf binary format compatible with nanopb",
+        "note": "payload sent as UTF-8 text (websocket-like)",
     }
 
 

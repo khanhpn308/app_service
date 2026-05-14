@@ -115,6 +115,10 @@ function capPush(arr, item, max = 80) {
   return next.length > max ? next.slice(next.length - max) : next;
 }
 
+const GPS_AXIS_MIN = 0;
+const GPS_AXIS_MAX = 100;
+const GPS_AXIS_RANGE = GPS_AXIS_MAX - GPS_AXIS_MIN;
+
 function normalizeEventTsToMs(ts) {
   const n = Number(ts);
   if (!Number.isFinite(n)) return Date.now();
@@ -839,7 +843,7 @@ const DeviceDetail = () => {
                     return (
                       <div
                         key={metric.key}
-                        className={`bg-slate-900 rounded-xl p-6 border border-slate-700 ${
+                        className={`min-w-0 bg-slate-900 rounded-xl p-6 border border-slate-700 ${
                           fullscreenMetric === metric.key ? 'fixed inset-4 z-[80] overflow-hidden' : ''
                         }`}
                       >
@@ -868,40 +872,39 @@ const DeviceDetail = () => {
                             )}
                           </button>
                         </div>
-                        <div className={`bg-slate-800 rounded-lg p-4 overflow-auto ${
-                          fullscreenMetric === metric.key ? 'h-[500px]' : 'h-[260px]'
+                        <div className={`bg-slate-800 rounded-lg p-4 overflow-hidden ${
+                          fullscreenMetric === metric.key ? 'h-[520px]' : 'h-[300px]'
                         }`}>
                           {realtimeSeries.length === 0 ? (
                             <div className="flex items-center justify-center h-full text-slate-400">
                               <p>Chờ dữ liệu GPS...</p>
                             </div>
                           ) : (
-                            <div className="space-y-2">
+                            <div className="h-full flex flex-col gap-2 min-w-0">
                               {/* GPS Scatter Plot */}
-                              <svg width="100%" height="100%" viewBox="0 0 400 300" className="border border-slate-700 rounded">
+                              <svg
+                                viewBox="0 0 1000 620"
+                                preserveAspectRatio="xMidYMid meet"
+                                className="w-full flex-1 min-h-0 border border-slate-700 rounded block"
+                              >
                                 <defs>
-                                  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#334155" strokeWidth="0.5"/>
+                                  <pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse">
+                                    <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#334155" strokeWidth="1"/>
                                   </pattern>
                                 </defs>
-                                <rect width="400" height="300" fill="#0f172a" />
-                                <rect width="400" height="300" fill="url(#grid)" />
+                                <rect width="1000" height="620" fill="#0f172a" />
+                                <rect width="1000" height="620" fill="url(#grid)" />
                                 
                                 {/* Axes */}
-                                <line x1="30" y1="270" x2="390" y2="270" stroke="#94a3b8" strokeWidth="1" />
-                                <line x1="30" y1="30" x2="30" y2="270" stroke="#94a3b8" strokeWidth="1" />
+                                <line x1="80" y1="540" x2="960" y2="540" stroke="#94a3b8" strokeWidth="2" />
+                                <line x1="80" y1="40" x2="80" y2="540" stroke="#94a3b8" strokeWidth="2" />
                                 
                                 {/* Data points */}
                                 {realtimeSeries.map((point, idx) => {
-                                  const minX = Math.min(...realtimeSeries.map(p => p.x));
-                                  const maxX = Math.max(...realtimeSeries.map(p => p.x));
-                                  const minY = Math.min(...realtimeSeries.map(p => p.y));
-                                  const maxY = Math.max(...realtimeSeries.map(p => p.y));
-                                  const rangeX = maxX - minX || 1;
-                                  const rangeY = maxY - minY || 1;
-                                  
-                                  const x = 30 + ((point.x - minX) / rangeX) * 360;
-                                  const y = 270 - ((point.y - minY) / rangeY) * 240;
+                                  const boundedX = Math.min(GPS_AXIS_MAX, Math.max(GPS_AXIS_MIN, point.x));
+                                  const boundedY = Math.min(GPS_AXIS_MAX, Math.max(GPS_AXIS_MIN, point.y));
+                                  const x = 80 + ((boundedX - GPS_AXIS_MIN) / GPS_AXIS_RANGE) * 880;
+                                  const y = 540 - ((boundedY - GPS_AXIS_MIN) / GPS_AXIS_RANGE) * 500;
                                   const isLatest = idx === realtimeSeries.length - 1;
                                   
                                   return (
@@ -909,7 +912,7 @@ const DeviceDetail = () => {
                                       <circle
                                         cx={x}
                                         cy={y}
-                                        r={isLatest ? 6 : 3}
+                                        r={isLatest ? 10 : 6}
                                         fill={isLatest ? '#f59e0b' : '#3b82f6'}
                                         opacity={0.7}
                                       />
@@ -917,10 +920,10 @@ const DeviceDetail = () => {
                                         <circle
                                           cx={x}
                                           cy={y}
-                                          r={8}
+                                          r={14}
                                           fill="none"
                                           stroke="#f59e0b"
-                                          strokeWidth="1.5"
+                                          strokeWidth="2"
                                           opacity="0.5"
                                         />
                                       )}
@@ -931,9 +934,9 @@ const DeviceDetail = () => {
                               
                               {/* Latest GPS data display */}
                               {realtimeSeries.length > 0 && (
-                                <div className="bg-slate-900 rounded p-3 mt-3 border border-slate-700">
+                                <div className="bg-slate-900 rounded p-3 border border-slate-700 shrink-0">
                                   <p className="text-slate-400 text-xs mb-2">Latest Reading:</p>
-                                  <p className="text-white font-mono text-sm">
+                                  <p className="text-white font-mono text-sm break-all">
                                     X: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].x.toFixed(6)}</span>, Y: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].y.toFixed(6)}</span>
                                   </p>
                                   <p className="text-slate-400 text-xs mt-1">Points: {realtimeSeries.length}</p>
@@ -950,7 +953,7 @@ const DeviceDetail = () => {
                   return (
                     <div
                       key={metric.key}
-                      className={`bg-slate-900 rounded-xl p-6 border border-slate-700 ${
+                      className={`min-w-0 bg-slate-900 rounded-xl p-6 border border-slate-700 ${
                         fullscreenMetric === metric.key ? 'fixed inset-4 z-[80] overflow-hidden' : ''
                       }`}
                     >

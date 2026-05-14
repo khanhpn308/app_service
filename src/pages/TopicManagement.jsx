@@ -8,12 +8,14 @@ function normalizeDevices(rows) {
     devicename: d.devicename || `Device ${d.device_id}`,
     status: d.status || 'deactive',
     topic: d.topic || '',
+    publish_topic: d.publish_topic || '',
   }));
 }
 
 export default function TopicManagement() {
   const [devices, setDevices] = useState([]);
   const [topicMap, setTopicMap] = useState({});
+  const [publishTopicMap, setPublishTopicMap] = useState({});
   const [runtimeTopics, setRuntimeTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
@@ -34,10 +36,13 @@ export default function TopicManagement() {
       setRuntimeTopics(Array.isArray(mqttTopics?.items) ? mqttTopics.items : []);
 
       const nextMap = {};
+      const nextPublishMap = {};
       normalized.forEach((d) => {
         nextMap[d.device_id] = d.topic || '';
+        nextPublishMap[d.device_id] = d.publish_topic || '';
       });
       setTopicMap(nextMap);
+      setPublishTopicMap(nextPublishMap);
     } catch (err) {
       setError(err?.message || 'Khong tai duoc du lieu topic');
     } finally {
@@ -59,11 +64,15 @@ export default function TopicManagement() {
     setOkMsg('');
     try {
       const topic = String(topicMap[deviceId] || '').trim();
+      const publishTopic = String(publishTopicMap[deviceId] || '').trim();
       await apiFetch(`/api/devices/${encodeURIComponent(deviceId)}/topic`, {
         method: 'PUT',
-        body: JSON.stringify({ topic: topic || null }),
+        body: JSON.stringify({
+          topic: topic || null,
+          publish_topic: publishTopic || null,
+        }),
       });
-      setOkMsg(`Da luu topic cho device ${deviceId}`);
+      setOkMsg(`Da luu topic nhan/gui cho device ${deviceId}`);
       await loadAll();
     } catch (err) {
       setError(err?.message || 'Luu topic that bai');
@@ -112,7 +121,7 @@ export default function TopicManagement() {
 
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-700 text-slate-300 text-sm">
-          Gan topic theo tung thiet bi (bo trong de bo subscribe).
+          Gan topic nhan/topic gui theo tung thiet bi (bo trong de xoa gia tri).
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -121,14 +130,15 @@ export default function TopicManagement() {
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Device ID</th>
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Ten thiet bi</th>
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Trang thai</th>
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Topic</th>
+                <th className="px-4 py-3 text-left text-slate-300 text-sm">Topic nhan (subscribe)</th>
+                <th className="px-4 py-3 text-left text-slate-300 text-sm">Topic gui (publish)</th>
                 <th className="px-4 py-3 text-left text-slate-300 text-sm">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
               {loading ? (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>Dang tai...</td>
+                  <td className="px-4 py-4 text-slate-400" colSpan={6}>Dang tai...</td>
                 </tr>
               ) : (
                 devices.map((d) => (
@@ -147,6 +157,20 @@ export default function TopicManagement() {
                           }))
                         }
                         placeholder="devices/101/telemetry"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
+                      />
+                    </td>
+                    <td className="px-4 py-3 min-w-[320px]">
+                      <input
+                        type="text"
+                        value={publishTopicMap[d.device_id] ?? ''}
+                        onChange={(e) =>
+                          setPublishTopicMap((prev) => ({
+                            ...prev,
+                            [d.device_id]: e.target.value,
+                          }))
+                        }
+                        placeholder="devices/101/downlink"
                         className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
                       />
                     </td>

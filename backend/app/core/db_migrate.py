@@ -129,6 +129,7 @@ def ensure_device_ui_columns(engine: Engine) -> None:
         ("location", "ALTER TABLE `device` ADD COLUMN `location` VARCHAR(255) NULL"),
         ("device_type", "ALTER TABLE `device` ADD COLUMN `device_type` VARCHAR(45) NULL"),
         ("topic", "ALTER TABLE `device` ADD COLUMN `topic` VARCHAR(255) NULL"),
+        ("publish_topic", "ALTER TABLE `device` ADD COLUMN `publish_topic` VARCHAR(255) NULL"),
     ]
     with engine.begin() as conn:
         for col_name, ddl in alters:
@@ -168,6 +169,25 @@ def ensure_device_topic_column(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE `device` ADD COLUMN `topic` VARCHAR(255) NULL"))
             logger.info("db_migrate: added device.topic")
     logger.info("db_migrate: ensure_device_topic_column OK")
+
+
+def ensure_device_publish_topic_column(engine: Engine) -> None:
+    """Ensure persisted MQTT publish topic column exists on `device` for server->device send flow."""
+    with engine.begin() as conn:
+        r = conn.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'device'
+                  AND COLUMN_NAME = 'publish_topic'
+                """
+            )
+        )
+        if (r.scalar() or 0) == 0:
+            conn.execute(text("ALTER TABLE `device` ADD COLUMN `publish_topic` VARCHAR(255) NULL"))
+            logger.info("db_migrate: added device.publish_topic")
+    logger.info("db_migrate: ensure_device_publish_topic_column OK")
 
 
 def ensure_test_logs_table(engine: Engine) -> None:

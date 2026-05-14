@@ -22,6 +22,7 @@ from app.core.db import SessionLocal, engine
 from app.core.db_migrate import (
     ensure_device_authorization_granted_by_varchar,
     ensure_device_drop_last_reading_columns,
+    ensure_device_publish_topic_column,
     ensure_device_topic_column,
     ensure_test_logs_table,
     ensure_device_ui_columns,
@@ -71,6 +72,7 @@ async def lifespan(app: FastAPI):
     ensure_device_drop_last_reading_columns(engine)
     ensure_device_ui_columns(engine)
     ensure_device_topic_column(engine)
+    ensure_device_publish_topic_column(engine)
     ensure_test_logs_table(engine)
     ensure_device_authorization_granted_by_varchar(engine)
 
@@ -107,12 +109,27 @@ async def lifespan(app: FastAPI):
         try:
             test_service.process_decoded_uplink(
                 decoded=payload,
-                protocol="websocket",
+                protocol="mqtt",
                 topic=str(payload.get("topic") or ""),
                 raw_hex=str(payload.get("raw_hex") or ""),
             )
         except Exception:
             pass
+
+    def _resolve_ping_reply_topic(incoming_topic: str) -> str | None:
+        t = str(incoming_topic or "").strip()
+        if not t:
+            return None
+        with SessionLocal() as db:
+            row = (
+                db.query(Device.publish_topic)
+                .filter(Device.topic == t)
+                .filter(Device.publish_topic.is_not(None))
+                .first()
+            )
+        if row is None:
+            return None
+        return str(row[0] or "").strip() or None
 
     mqtt_sub = MqttSubscriber(
         enabled=settings.mqtt_enabled,
@@ -126,6 +143,7 @@ async def lifespan(app: FastAPI):
         qos=settings.mqtt_qos,
         max_messages=settings.mqtt_max_messages,
         on_sensor_payload=_handle_sensor_payload,
+        on_ping_reply_topic=_resolve_ping_reply_topic,
     )
     mqtt_sub.start()
     # Restore topic subscriptions from persisted device.topic values.

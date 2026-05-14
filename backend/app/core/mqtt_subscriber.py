@@ -63,6 +63,7 @@ class MqttSubscriber:
         qos: int,
         max_messages: int,
         on_sensor_payload: Callable[[dict[str, Any]], None] | None = None,
+        on_ping_reply_topic: Callable[[str], str | None] | None = None,
     ) -> None:
         self._enabled = enabled
         self._host = host
@@ -74,6 +75,7 @@ class MqttSubscriber:
         self._topics = _parse_topics(topics_csv)
         self._qos = int(qos)
         self._on_sensor_payload = on_sensor_payload
+        self._on_ping_reply_topic = on_ping_reply_topic
 
         self._messages: deque[MqttMessage] = deque(maxlen=max(1, int(max_messages)))
         self._lock = threading.Lock()
@@ -256,12 +258,46 @@ class MqttSubscriber:
 
     def _on_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> None:  # noqa: ARG002
         """Callback paho: decode UTF-8, thử pretty-print JSON, append vào deque."""
-        # Server receive timestamp: capture at callback entry for delay measurement.
-        server_receive_ms = time.time_ns() // 1_000_000
+        topic = str(msg.topic)
+        payload_bytes = bytes(msg.payload or b"")
+
+        is_ping = payload_bytes.startswith(b"PING|")
+        if is_ping:
+            reply_topic = topic
+            if self._on_ping_reply_topic is not None:
+                try:
+                    resolved = str(self._on_ping_reply_topic(topic) or "").strip()
+                    if resolved:
+                        reply_topic = resolved
+                except Exception as exc:  # noqa: BLE001
+                    self._last_connect_error = f"ping reply topic resolver failed ({topic}): {exc}"
+            try:
+                self._client.publish(
+                    reply_topic,
+                    payload=payload_bytes,
+                    qos=int(getattr(msg, "qos", self._qos)),
+                    retain=False,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._last_connect_error = f"ping echo publish failed ({reply_topic}): {exc}"
+
         try:
-            payload_raw = msg.payload.decode("utf-8", errors="replace")
+            payload_raw = payload_bytes.decode("utf-8", errors="replace")
         except Exception:  # noqa: BLE001
-            payload_raw = str(msg.payload)
+            payload_raw = str(payload_bytes)
+
+        if is_ping:
+            with self._lock:
+                self._messages.append(
+                    MqttMessage(
+                        topic=topic,
+                        payload=payload_raw,
+                        qos=int(getattr(msg, "qos", 0)),
+                        retain=bool(getattr(msg, "retain", False)),
+                        received_at=time.time(),
+                    )
+                )
+            return
 
         # Normalize JSON payloads (handy for debugging / later forwarding)
         payload = payload_raw
@@ -270,9 +306,8 @@ class MqttSubscriber:
         except Exception:  # noqa: BLE001
             pass
 
-        decoded = decode_sensor_payload(str(msg.topic), bytes(msg.payload))
+        decoded = decode_sensor_payload(topic, payload_bytes)
         if isinstance(decoded, dict):
-            decoded["server_receive_ms"] = server_receive_ms
             try:
                 payload = json.dumps(decoded, ensure_ascii=False)
             except Exception:  # noqa: BLE001
@@ -287,10 +322,11 @@ class MqttSubscriber:
         with self._lock:
             self._messages.append(
                 MqttMessage(
-                    topic=str(msg.topic),
+                    topic=topic,
                     payload=payload,
                     qos=int(getattr(msg, "qos", 0)),
                     retain=bool(getattr(msg, "retain", False)),
                     received_at=time.time(),
                 )
             )
+
