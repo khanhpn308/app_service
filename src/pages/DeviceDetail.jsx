@@ -28,7 +28,6 @@ import {
   Waves,
   Users,
 } from 'lucide-react';
-import { mockDevices, generateDeviceHistory } from '../data/mockData';
 import { apiFetch } from '../lib/api';
 import { wsUrl } from '../lib/wsUrl';
 import { useAuth } from '../contexts/AuthContext';
@@ -186,9 +185,9 @@ const DeviceDetail = () => {
           }
         }
       } catch {
-        const mock = mockDevices.find((d) => String(d.id) === String(deviceId));
+        // Không fallback mock data — để UI hiện trạng thái "không tải được thiết bị".
         if (!cancelled) {
-          setDevice(mock ?? null);
+          setDevice(null);
           setApiDetail(null);
         }
       } finally {
@@ -232,18 +231,10 @@ const DeviceDetail = () => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setHistoryError(err?.message || 'Khong tai duoc lich su 30 phut');
-        const fallback = generateDeviceHistory(device?.id ?? deviceId).map((row) => ({
-          id: row.id,
-          time: row.timestamp,
-          timestamp: row.timestamp,
-          temperature: Number(row.parameterValue) || 0,
-          vibration: Number(row.parameterValue) || 0,
-          voltage: Number(row.parameterValue) || 0,
-          current: Number(row.parameterValue) || 0,
-        }));
-        setHistoryRows(fallback);
-        setRealtimeSeries(fallback.slice(-80));
+        // Không fill mock data — hiện lỗi + biểu đồ rỗng thay vì số liệu giả.
+        setHistoryError(err?.message || 'Không tải được lịch sử 30 phút');
+        setHistoryRows([]);
+        setRealtimeSeries([]);
       })
       .finally(() => {
         if (!cancelled) setHistoryLoading(false);
@@ -918,9 +909,12 @@ const DeviceDetail = () => {
                                   const x = 80 + ((boundedX - GPS_AXIS_MIN) / GPS_AXIS_RANGE) * 880;
                                   const y = 540 - ((boundedY - GPS_AXIS_MIN) / GPS_AXIS_RANGE) * 500;
                                   const isLatest = idx === realtimeSeries.length - 1;
-                                  
+                                  // Key ổn định theo timestamp+toạ độ (buffer 80 điểm xoay vòng;
+                                  // dùng idx gây tái dùng DOM sai vị trí khi điểm cũ bị đẩy ra).
+                                  const pointKey = `${point.timestamp ?? point.time ?? idx}-${point.x}-${point.y}`;
+
                                   return (
-                                    <g key={idx}>
+                                    <g key={pointKey}>
                                       <circle
                                         cx={x}
                                         cy={y}

@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Cpu, MapPin, Clock, ExternalLink, Plus, Search, Trash2 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { wsUrl } from '../lib/wsUrl';
-import { mockDevices } from '../data/mockData';
 import AddDeviceModal from '../components/AddDeviceModal';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
@@ -33,11 +32,141 @@ const normalizeDeviceType = (type) => {
   return 'Temperature';
 };
 
+// Định nghĩa ở module-level + React.memo: không tái tạo type mỗi render (tránh remount
+// toàn bộ card) và bỏ qua re-render khi props của card không đổi.
+const DeviceCard = React.memo(function DeviceCard({ device, isAdmin, onDelete, onToggle }) {
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg hover:shadow-xl hover:border-blue-500 transition-all duration-200 group">
+      {/* Card Header */}
+      <div className="p-6 pb-4">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <div className={`p-2 rounded-lg ${
+              device.status === 'online' ? 'bg-green-500/20' : 'bg-red-500/20'
+            }`}>
+              <Cpu className={`h-6 w-6 ${
+                device.status === 'online' ? 'text-green-500' : 'text-red-500'
+              }`} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">
+                {device.name}
+              </h3>
+              <p className="text-slate-400 text-sm">{device.type}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <Link
+              to={`/devices/${device.id}`}
+              className="p-2 hover:bg-slate-700 rounded-lg transition-colors duration-200"
+              title="View Detail"
+              aria-label={`View detail ${device.id}`}
+            >
+              <ExternalLink className="h-5 w-5 text-slate-400 hover:text-blue-400" />
+            </Link>
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onDelete(device)}
+                className="text-red-400 hover:text-red-300 hover:bg-red-900/40"
+                title="Xóa thiết bị"
+                aria-label={`Xóa thiết bị ${device.id}`}
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Device ID */}
+        <div className="bg-slate-900 rounded-lg p-3 mb-4">
+          <p className="text-slate-500 text-xs mb-1">Device ID</p>
+          <p className="text-blue-400 font-mono text-sm font-semibold">{device.id}</p>
+        </div>
+
+        {/* Location */}
+        <div className="flex items-center space-x-2 text-slate-400 mb-3">
+          <MapPin className="h-4 w-4" />
+          <span className="text-sm">{device.location}</span>
+        </div>
+
+        {/* Last Update */}
+        <div className="flex items-center space-x-2 text-slate-500 mb-4">
+          <Clock className="h-4 w-4" />
+          <span className="text-xs">{device.lastUpdate}</span>
+        </div>
+
+        {isAdmin && (
+          <div className="bg-slate-900 rounded-lg p-3 mb-4">
+            <p className="text-slate-500 text-xs mb-1">Được phân quyền cho</p>
+            {Array.isArray(device.managers) && device.managers.length > 0 ? (
+              <div className="space-y-1 max-h-20 overflow-y-auto">
+                {device.managers.slice(0, 3).map((m) => (
+                  <p key={m.user_id} className="text-slate-200 text-xs">
+                    {m.fullname} <span className="text-slate-500">@{m.username}</span>
+                  </p>
+                ))}
+                {device.managers.length > 3 && (
+                  <p className="text-slate-500 text-[11px]">
+                    +{device.managers.length - 3} user khác
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-slate-500 text-xs">Chưa phân quyền cho user nào</p>
+            )}
+          </div>
+        )}
+
+        {/* Current Value */}
+        <div className="bg-slate-900 rounded-lg p-3 mb-4">
+          <p className="text-slate-500 text-xs mb-1">Current Reading</p>
+          {device.type === 'GPS' ? (
+            <div className="text-white">
+              <p className="font-bold text-sm mb-1">X: <span className="text-blue-400">{Number.isFinite(Number(device.x)) ? Number(device.x).toFixed(2) : device.x}</span></p>
+              <p className="font-bold text-sm">Y: <span className="text-blue-400">{Number.isFinite(Number(device.y)) ? Number(device.y).toFixed(2) : device.y}</span></p>
+            </div>
+          ) : (
+            <p className="text-white font-bold text-2xl">
+              {device.value} <span className="text-slate-400 text-base">{device.unit}</span>
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Card Footer */}
+      <div className="px-6 py-4 bg-slate-900 border-t border-slate-700 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <div className={`w-2 h-2 rounded-full ${
+            device.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+          }`}></div>
+          <span className={`text-sm font-medium ${
+            device.status === 'online' ? 'text-green-500' : 'text-red-500'
+          }`}>
+            {device.status.toUpperCase()}
+          </span>
+        </div>
+
+        {/* Live Status Toggle */}
+        <Button
+          onClick={() => onToggle(device.id)}
+          variant={device.status === 'online' ? 'destructive' : 'default'}
+          className={device.status === 'online' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}
+        >
+          {device.status === 'online' ? 'Turn Off' : 'Turn On'}
+        </Button>
+      </div>
+    </div>
+  );
+});
+
 const Devices = () => {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
-  const [devices, setDevices] = useState(mockDevices);
-  const [loading, setLoading] = useState(false);
+  const [devices, setDevices] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -143,9 +272,9 @@ const Devices = () => {
         setDevices(normalizedList);
       } catch (e) {
         if (!mounted) return;
-        // fallback to mock for UI continuity
+        // Không fallback mock data trong prod (tránh hiển thị thiết bị giả gây hiểu nhầm).
         setLoadError(e.message || 'Không tải được danh sách thiết bị');
-        setDevices(mockDevices);
+        setDevices([]);
       } finally {
         if (!mounted) return;
         setLoading(false);
@@ -157,13 +286,15 @@ const Devices = () => {
     };
   }, [isAdmin]);
 
-  const handleToggleStatus = (deviceId) => {
-    setDevices(devices.map(device => 
+  // useCallback + functional setState => tham chiếu ổn định, cho phép React.memo
+  // trên DeviceCard tránh re-render thừa.
+  const handleToggleStatus = useCallback((deviceId) => {
+    setDevices((prev) => prev.map(device =>
       String(device.id ?? device.device_id) === String(deviceId)
         ? { ...device, status: device.status === 'online' ? 'offline' : 'online' }
         : device
     ));
-  };
+  }, []);
 
   const handleDeviceClick = (deviceId) => {
     navigate(`/devices/${deviceId}`);
@@ -232,136 +363,12 @@ const Devices = () => {
     );
   });
 
-  const DeviceCard = ({ device }) => (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg hover:shadow-xl hover:border-blue-500 transition-all duration-200 group">
-      {/* Card Header */}
-      <div className="p-6 pb-4">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <div className={`p-2 rounded-lg ${
-              device.status === 'online' ? 'bg-green-500/20' : 'bg-red-500/20'
-            }`}>
-              <Cpu className={`h-6 w-6 ${
-                device.status === 'online' ? 'text-green-500' : 'text-red-500'
-              }`} />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">
-                {device.name}
-              </h3>
-              <p className="text-slate-400 text-sm">{device.type}</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-1">
-            <Link
-              to={`/devices/${device.id}`}
-              className="p-2 hover:bg-slate-700 rounded-lg transition-colors duration-200"
-              title="View Detail"
-              aria-label={`View detail ${device.id}`}
-            >
-              <ExternalLink className="h-5 w-5 text-slate-400 hover:text-blue-400" />
-            </Link>
-            {isAdmin() && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setDeleteTarget(device);
-                  setDeleteConfirm('');
-                  setDeleteError('');
-                }}
-                className="text-red-400 hover:text-red-300 hover:bg-red-900/40"
-                title="Xóa thiết bị"
-                aria-label={`Xóa thiết bị ${device.id}`}
-              >
-                <Trash2 className="h-5 w-5" />
-              </Button>
-            )}
-
-          </div>
-        </div>
-
-        {/* Device ID */}
-        <div className="bg-slate-900 rounded-lg p-3 mb-4">
-          <p className="text-slate-500 text-xs mb-1">Device ID</p>
-          <p className="text-blue-400 font-mono text-sm font-semibold">{device.id}</p>
-        </div>
-
-        {/* Location */}
-        <div className="flex items-center space-x-2 text-slate-400 mb-3">
-          <MapPin className="h-4 w-4" />
-          <span className="text-sm">{device.location}</span>
-        </div>
-
-        {/* Last Update */}
-        <div className="flex items-center space-x-2 text-slate-500 mb-4">
-          <Clock className="h-4 w-4" />
-          <span className="text-xs">{device.lastUpdate}</span>
-        </div>
-
-        {isAdmin() && (
-          <div className="bg-slate-900 rounded-lg p-3 mb-4">
-            <p className="text-slate-500 text-xs mb-1">Được phân quyền cho</p>
-            {Array.isArray(device.managers) && device.managers.length > 0 ? (
-              <div className="space-y-1 max-h-20 overflow-y-auto">
-                {device.managers.slice(0, 3).map((m) => (
-                  <p key={m.user_id} className="text-slate-200 text-xs">
-                    {m.fullname} <span className="text-slate-500">@{m.username}</span>
-                  </p>
-                ))}
-                {device.managers.length > 3 && (
-                  <p className="text-slate-500 text-[11px]">
-                    +{device.managers.length - 3} user khác
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-slate-500 text-xs">Chưa phân quyền cho user nào</p>
-            )}
-          </div>
-        )}
-
-        {/* Current Value */}
-        <div className="bg-slate-900 rounded-lg p-3 mb-4">
-          <p className="text-slate-500 text-xs mb-1">Current Reading</p>
-          {device.type === 'GPS' ? (
-            <div className="text-white">
-              <p className="font-bold text-sm mb-1">X: <span className="text-blue-400">{Number.isFinite(Number(device.x)) ? Number(device.x).toFixed(2) : device.x}</span></p>
-              <p className="font-bold text-sm">Y: <span className="text-blue-400">{Number.isFinite(Number(device.y)) ? Number(device.y).toFixed(2) : device.y}</span></p>
-            </div>
-          ) : (
-            <p className="text-white font-bold text-2xl">
-              {device.value} <span className="text-slate-400 text-base">{device.unit}</span>
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Card Footer */}
-      <div className="px-6 py-4 bg-slate-900 border-t border-slate-700 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${
-            device.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-          }`}></div>
-          <span className={`text-sm font-medium ${
-            device.status === 'online' ? 'text-green-500' : 'text-red-500'
-          }`}>
-            {device.status.toUpperCase()}
-          </span>
-        </div>
-
-        {/* Live Status Toggle */}
-        <Button
-          onClick={() => handleToggleStatus(device.id)}
-          variant={device.status === 'online' ? 'destructive' : 'default'}
-          className={device.status === 'online' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}
-        >
-          {device.status === 'online' ? 'Turn Off' : 'Turn On'}
-        </Button>
-      </div>
-    </div>
-  );
+  const admin = isAdmin();
+  const handleDeleteRequest = useCallback((device) => {
+    setDeleteTarget(device);
+    setDeleteConfirm('');
+    setDeleteError('');
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -402,7 +409,13 @@ const Devices = () => {
         {loading
           ? Array.from({ length: 3 }).map((_, i) => <DeviceCardSkeleton key={i} />)
           : filteredDevices.map(device => (
-              <DeviceCard key={device.id} device={device} />
+              <DeviceCard
+                key={device.id}
+                device={device}
+                isAdmin={admin}
+                onDelete={handleDeleteRequest}
+                onToggle={handleToggleStatus}
+              />
             ))
         }
       </div>

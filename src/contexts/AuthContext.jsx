@@ -8,7 +8,7 @@
  *
  * Hook `useAuth` bắt buộc dùng bên trong `AuthProvider`.
  */
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../lib/api';
 
 const AuthContext = createContext();
@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }) => {
   }, [loadSession]);
 
   /** POST `/api/auth/login`; lưu token + user; `skipAuth` vì chưa có Bearer. */
-  const login = async (username, password) => {
+  const login = useCallback(async (username, password) => {
     localStorage.removeItem('iot_token');
     const data = await apiFetch('/api/auth/login', {
       method: 'POST',
@@ -61,25 +61,23 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('iot_user', JSON.stringify(data.user));
     setUser(data.user);
     return { success: true, user: data.user };
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('iot_token');
     localStorage.removeItem('iot_user');
-  };
+  }, []);
 
   /** RBAC phía UI — backend vẫn phải kiểm tra lại. */
-  const isAdmin = () => user?.role === 'admin';
+  const isAdmin = useCallback(() => user?.role === 'admin', [user]);
 
-  const value = {
-    user,
-    login,
-    logout,
-    isAdmin,
-    loading,
-    refreshUser: loadSession,
-  };
+  // Memo hóa value để consumer không re-render khi AuthProvider render lại
+  // mà user/loading không đổi.
+  const value = useMemo(
+    () => ({ user, login, logout, isAdmin, loading, refreshUser: loadSession }),
+    [user, login, logout, isAdmin, loading, loadSession],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
