@@ -11,6 +11,7 @@ Tên ``main`` / ``create_app``: quy ước phổ biến trong FastAPI/Flask — 
 instance ``app`` dùng cho uvicorn: ``uvicorn app.main:app``.
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -46,6 +47,8 @@ from app.models import test_log  # noqa: F401
 from app.models import user  # noqa: F401
 from app.models.base import Base
 from app.api.websocket_routes import router as websocket_router
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
@@ -117,7 +120,8 @@ async def lifespan(app: FastAPI):
                 raw_hex=str(payload.get("raw_hex") or ""),
             )
         except Exception:
-            pass
+            # Test log không critical — nhưng vẫn log để không nuốt lỗi âm thầm.
+            logger.warning("test_service.process_decoded_uplink failed", exc_info=True)
 
     def _resolve_ping_reply_topic(incoming_topic: str) -> str | None:
         t = str(incoming_topic or "").strip()

@@ -25,13 +25,19 @@ security = HTTPBearer(auto_error=False)
 
 def get_db() -> Generator[Session, None, None]:
     """
-    Yield một session DB; ``finally`` đảm bảo ``close()`` sau khi response trả về.
+    Yield một session DB; rollback nếu request lỗi, luôn ``close()`` sau khi xong.
+
+    Rollback ở đây bảo vệ mọi route: nếu handler raise (kể cả commit fail), session
+    được đưa về trạng thái sạch trước khi trả connection về pool.
 
     Dùng: ``db: Session = Depends(get_db)`` trên mọi route cần truy vấn ORM.
     """
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

@@ -9,10 +9,13 @@ Mục tiêu:
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
 from influxdb_client import InfluxDBClient, Point, WriteOptions
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def _pick_metric(payload: dict[str, Any], *keys: str) -> float | None:
@@ -70,6 +73,7 @@ class InfluxService:
         except Exception as exc:  # noqa: BLE001
             self._started = False
             self._last_error = str(exc)
+            logger.warning("InfluxDB start failed — telemetry sẽ không ghi được: %s", exc)
 
     def stop(self) -> None:
         """Đóng writer/client khi shutdown app."""
@@ -112,6 +116,7 @@ class InfluxService:
         device_id = str(payload.get("device_id") or "unknown")
         topic = str(payload.get("topic") or "")
         ts = payload.get("ts")
+        location = str(payload.get("location") or "").strip() or None
 
         try:
             ts_value = float(ts)
@@ -130,6 +135,9 @@ class InfluxService:
             .tag("topic", topic)
             .time(ts_dt)
         )
+
+        if location:
+            point = point.tag("location", location)
 
         # Chấp nhận nhiều alias để tương thích payload template cũ/mới.
         temperature = _pick_metric(payload, "temperature", "temp", "temp_c", "temperature_c")
@@ -181,7 +189,9 @@ class InfluxService:
             self._writer.write(bucket=self._bucket, org=self._org, record=point)
             self._last_error = None
         except Exception as exc:  # noqa: BLE001
+            # Ghi log để operator biết telemetry đang bị rớt (không nuốt âm thầm).
             self._last_error = str(exc)
+            logger.warning("InfluxDB write failed (device_id=%s): %s", device_id, exc)
 
     def query_history(self, *, minutes: int = 30, device_id: str | None = None) -> list[dict[str, Any]]:
         """
@@ -204,8 +214,8 @@ class InfluxService:
 from(bucket: {json.dumps(self._bucket)})
   |> range(start: -{minutes}m)
   |> filter(fn: (r) => r._measurement == {json.dumps(self._measurement)}){filter_device}
-    |> filter(fn: (r) => r._field == "temperature" or r._field == "vibration" or r._field == "x" or r._field == "y" or r._field == "voltage" or r._field == "current")
-  |> pivot(rowKey:["_time", "device_id", "sensor_type", "topic"], columnKey:["_field"], valueColumn:"_value")
+        |> filter(fn: (r) => r._field == "temperature" or r._field == "vibration" or r._field == "x" or r._field == "y" or r._field == "voltage" or r._field == "current")
+    |> pivot(rowKey:["_time", "device_id", "sensor_type", "topic", "location"], columnKey:["_field"], valueColumn:"_value")
   |> sort(columns:["_time"], desc: false)
 '''
 
@@ -227,6 +237,7 @@ from(bucket: {json.dumps(self._bucket)})
                         "device_id": str(values.get("device_id") or ""),
                         "sensor_type": str(values.get("sensor_type") or ""),
                         "topic": str(values.get("topic") or ""),
+                        "location": str(values.get("location") or ""),
                         "temperature": values.get("temperature"),
                         "vibration": values.get("vibration"),
                         "x": values.get("x"),

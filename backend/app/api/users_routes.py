@@ -10,7 +10,7 @@ REST API quản lý người dùng (chủ yếu **admin**).
 
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_admin
@@ -28,16 +28,27 @@ router = APIRouter(prefix="/users", tags=["users"])
 def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ) -> list[UserPublic]:
-    """Trả toàn bộ user; join authorization để điền ``authorized_devices``."""
+    """Danh sách user (phân trang); join authorization chỉ cho user trong trang."""
     deactivate_expired_users(db)
-    rows = db.query(User).order_by(User.user_id.asc()).all()
+    rows = (
+        db.query(User)
+        .order_by(User.user_id.asc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
+    user_ids = [u.user_id for u in rows]
+    # Chỉ lấy authorization của các user trong trang hiện tại (tránh quét toàn bảng).
     pairs = (
         db.query(DeviceAuthorization.user_id, Device.device_id, Device.devicename)
         .join(Device, Device.device_id == DeviceAuthorization.device_id)
+        .filter(DeviceAuthorization.user_id.in_(user_ids))
         .order_by(DeviceAuthorization.user_id.asc(), DeviceAuthorization.device_id.asc())
         .all()
-    )
+    ) if user_ids else []
     by_user: dict[int, list[AuthorizedDeviceBrief]] = defaultdict(list)
     for uid, did, name in pairs:
         by_user[uid].append(AuthorizedDeviceBrief(device_id=did, devicename=name))

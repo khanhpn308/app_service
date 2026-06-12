@@ -12,7 +12,7 @@ Viết tắt:
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -50,9 +50,17 @@ def _sync_topic_runtime(request: Request, old_topic: str, new_topic: str) -> Non
 def list_devices_admin(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ) -> list[DevicePublic]:
-    """Admin: danh sách toàn bộ thiết bị (sắp theo ``device_id``)."""
-    rows = db.query(Device).order_by(Device.device_id.asc()).all()
+    """Admin: danh sách thiết bị (phân trang ``limit``/``offset``, sắp theo ``device_id``)."""
+    rows = (
+        db.query(Device)
+        .order_by(Device.device_id.asc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
     return [DevicePublic.model_validate(r) for r in rows]
 
 
