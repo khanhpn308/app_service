@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_admin
+from app.core.security import hash_password
 from app.models.device import Device
 from app.models.device_authorization import DeviceAuthorization
 from app.models.user import User
@@ -65,7 +66,8 @@ def create_device(
     row = Device(
         device_id=body.device_id,
         devicename=body.devicename,
-        password=body.password,
+        # Hash mật khẩu thiết bị (bcrypt) — không lưu plaintext.
+        password=hash_password(body.password) if body.password else None,
         status=body.status,
         user_device_asignment_id=body.user_device_asignment_id,
         location=body.location,
@@ -97,6 +99,9 @@ def patch_device(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
     data = body.model_dump(exclude_unset=True)
+    # Nếu cập nhật password thì hash trước khi lưu (không lưu plaintext).
+    if data.get("password"):
+        data["password"] = hash_password(data["password"])
     old_topic = (row.topic or "").strip()
     for key, val in data.items():
         setattr(row, key, val)

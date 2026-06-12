@@ -15,10 +15,11 @@ Luồng chính:
 import secrets
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_admin
+from app.core.rate_limit import limiter
 from app.core.security import create_access_token, hash_password, verify_password
 from app.core.user_expiry import deactivate_expired_users
 from app.models.user import User
@@ -42,7 +43,8 @@ def _user_public(u: User) -> UserPublic:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+@limiter.limit("10/minute")
+def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     """Đăng nhập: kiểm tra bcrypt, trạng thái active, gọi ``deactivate_expired_users``, trả JWT."""
     deactivate_expired_users(db)
     user = db.query(User).filter(User.username == body.username).first()
@@ -98,7 +100,8 @@ def register(
 
 
 @router.post("/bootstrap", response_model=UserPublic)
-def bootstrap_first_admin(body: BootstrapRequest, db: Session = Depends(get_db)) -> UserPublic:
+@limiter.limit("5/minute")
+def bootstrap_first_admin(request: Request, body: BootstrapRequest, db: Session = Depends(get_db)) -> UserPublic:
     """Khởi tạo admin đầu tiên khi ``COUNT(user) == 0`` (an toàn cho môi trường mới)."""
     if db.query(User).count() > 0:
         raise HTTPException(status_code=403, detail="Bootstrap disabled: users already exist")
@@ -133,7 +136,8 @@ def read_me(db: Session = Depends(get_db), user: User = Depends(get_current_user
 
 
 @router.post("/recover-password", response_model=RecoverPasswordResponse)
-def recover_password(body: RecoverPasswordRequest, db: Session = Depends(get_db)) -> RecoverPasswordResponse:
+@limiter.limit("5/minute")
+def recover_password(request: Request, body: RecoverPasswordRequest, db: Session = Depends(get_db)) -> RecoverPasswordResponse:
     """Xác thực username + CCCD; mật khẩu đã hash bằng bcrypt nên không trả lại mật khẩu cũ — chỉ cấp mật khẩu tạm mới."""
     user = db.query(User).filter(User.username == body.username.strip()).first()
     if user is None or user.cccd != body.cccd:

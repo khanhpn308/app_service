@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { Activity, Gauge, Maximize2, Minimize2, Thermometer, Waves, Zap } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { wsUrl } from '../lib/wsUrl';
 import { useAuth } from '../contexts/AuthContext';
 
 function resolveWsBase() {
@@ -283,7 +284,7 @@ export default function GlobalDashboard() {
   }, [isAdmin]);
 
   useEffect(() => {
-    const url = WS_BASE ? `${WS_BASE}/ws/global` : null;
+    const url = WS_BASE ? wsUrl('/ws/global', WS_BASE) : null;
     if (!url) return undefined;
 
     let closedByEffect = false;

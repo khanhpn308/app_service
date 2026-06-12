@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi import HTTPException
 
-from app.core.deps import require_admin
+from app.core.deps import get_current_user, require_admin
 from app.models.user import User
 
 
@@ -40,8 +40,8 @@ def _get_influx(request: Request):
 
 
 @router.get("/status")
-def mqtt_status(request: Request):
-    """Trả dict trạng thái: kết nối, host, topic, lỗi kết nối gần nhất, …"""
+def mqtt_status(request: Request, _: User = Depends(require_admin)):
+    """Admin: trạng thái subscriber (kết nối, host, topic, lỗi gần nhất, …)."""
     mqtt = _get_mqtt(request)
     return mqtt.status()
 
@@ -50,8 +50,9 @@ def mqtt_status(request: Request):
 def mqtt_messages(
     request: Request,
     limit: int = Query(default=50, ge=1, le=1000),
+    _: User = Depends(require_admin),
 ):
-    """Danh sách tin đã buffer trong bộ nhớ (giới hạn ``limit``)."""
+    """Admin: tin đã buffer trong bộ nhớ (giới hạn ``limit``)."""
     mqtt = _get_mqtt(request)
     return {"items": mqtt.latest_messages(limit=limit)}
 
@@ -95,15 +96,16 @@ def mqtt_history(
     request: Request,
     minutes: int = Query(default=30, ge=1, le=180),
     device_id: str | None = Query(default=None),
+    _: User = Depends(get_current_user),
 ):
-    """Lịch sử dữ liệu cảm biến từ InfluxDB trong N phút gần nhất (mặc định 30 phút)."""
+    """Lịch sử cảm biến từ InfluxDB N phút gần nhất (dashboard dùng — yêu cầu đăng nhập)."""
     influx = _get_influx(request)
     items = influx.query_history(minutes=minutes, device_id=device_id)
     return {"items": items, "minutes": minutes, "device_id": device_id}
 
 
 @router.get("/influx/status")
-def mqtt_influx_status(request: Request):
-    """Trạng thái Influx service: enabled/start/bucket/last_error để debug ghi dữ liệu."""
+def mqtt_influx_status(request: Request, _: User = Depends(require_admin)):
+    """Admin: trạng thái Influx service (enabled/start/bucket/last_error) để debug."""
     influx = _get_influx(request)
     return influx.status()

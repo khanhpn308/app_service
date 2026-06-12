@@ -3,8 +3,26 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Cpu, MapPin, Clock, ExternalLink, Plus, Search, Trash2 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
+import { wsUrl } from '../lib/wsUrl';
 import { mockDevices } from '../data/mockData';
 import AddDeviceModal from '../components/AddDeviceModal';
+import { Skeleton } from '../components/ui/skeleton';
+import { Button } from '../components/ui/button';
+
+const DeviceCardSkeleton = () => (
+  <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden p-6 space-y-4">
+    <div className="flex items-center gap-3">
+      <Skeleton className="h-10 w-10 rounded-lg" />
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-3 w-16" />
+      </div>
+    </div>
+    <Skeleton className="h-16 w-full rounded-lg" />
+    <Skeleton className="h-4 w-full" />
+    <Skeleton className="h-4 w-3/4" />
+  </div>
+);
 
 const normalizeDeviceType = (type) => {
   const t = String(type || '').trim().toLowerCase();
@@ -27,6 +45,24 @@ const Devices = () => {
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    // WebSocket connection for live updates (kèm JWT để backend xác thực)
+    const ws = new WebSocket(wsUrl('/ws/global'));
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setDevices((prevDevices) =>
+        prevDevices.map((d) =>
+          String(d.id ?? d.device_id) === String(data.device_id)
+            ? { ...d, ...data }
+            : d
+        )
+      );
+    };
+
+    return () => ws.close();
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -179,9 +215,11 @@ const Devices = () => {
       const lastUpdate = d.lastUpdate ?? '—';
       const value = d.value ?? '—';
       const unit = d.unit ?? '';
-      const x = d.x ?? '—';
-      const y = d.y ?? '—';
-      return { ...d, id: String(id), name, type, location, lastUpdate, value, unit, x, y };
+      const coordX = d.x ?? d.longitude ?? d.lon ?? d.long ?? null;
+      const coordY = d.y ?? d.latitude ?? d.lat ?? null;
+      const xVal = coordX == null ? '—' : coordX;
+      const yVal = coordY == null ? '—' : coordY;
+      return { ...d, id: String(id), name, type, location, lastUpdate, value, unit, x: xVal, y: yVal };
     });
   }, [devices]);
 
@@ -225,20 +263,22 @@ const Devices = () => {
               <ExternalLink className="h-5 w-5 text-slate-400 hover:text-blue-400" />
             </Link>
             {isAdmin() && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => {
                   setDeleteTarget(device);
                   setDeleteConfirm('');
                   setDeleteError('');
                 }}
-                className="p-2 hover:bg-red-900/40 rounded-lg transition-colors duration-200"
+                className="text-red-400 hover:text-red-300 hover:bg-red-900/40"
                 title="Xóa thiết bị"
                 aria-label={`Xóa thiết bị ${device.id}`}
               >
-                <Trash2 className="h-5 w-5 text-red-400 hover:text-red-300" />
-              </button>
+                <Trash2 className="h-5 w-5" />
+              </Button>
             )}
+
           </div>
         </div>
 
@@ -287,8 +327,8 @@ const Devices = () => {
           <p className="text-slate-500 text-xs mb-1">Current Reading</p>
           {device.type === 'GPS' ? (
             <div className="text-white">
-              <p className="font-bold text-sm mb-1">X: <span className="text-blue-400">{device.x}</span></p>
-              <p className="font-bold text-sm">Y: <span className="text-blue-400">{device.y}</span></p>
+              <p className="font-bold text-sm mb-1">X: <span className="text-blue-400">{Number.isFinite(Number(device.x)) ? Number(device.x).toFixed(2) : device.x}</span></p>
+              <p className="font-bold text-sm">Y: <span className="text-blue-400">{Number.isFinite(Number(device.y)) ? Number(device.y).toFixed(2) : device.y}</span></p>
             </div>
           ) : (
             <p className="text-white font-bold text-2xl">
@@ -312,16 +352,13 @@ const Devices = () => {
         </div>
 
         {/* Live Status Toggle */}
-        <button
+        <Button
           onClick={() => handleToggleStatus(device.id)}
-          className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${
-            device.status === 'online'
-              ? 'bg-red-600 hover:bg-red-700 text-white'
-              : 'bg-green-600 hover:bg-green-700 text-white'
-          }`}
+          variant={device.status === 'online' ? 'destructive' : 'default'}
+          className={device.status === 'online' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}
         >
           {device.status === 'online' ? 'Turn Off' : 'Turn On'}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -362,9 +399,12 @@ const Devices = () => {
 
       {/* Devices Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredDevices.map(device => (
-          <DeviceCard key={device.id} device={device} />
-        ))}
+        {loading
+          ? Array.from({ length: 3 }).map((_, i) => <DeviceCardSkeleton key={i} />)
+          : filteredDevices.map(device => (
+              <DeviceCard key={device.id} device={device} />
+            ))
+        }
       </div>
 
       {/* No Results */}
@@ -430,21 +470,19 @@ const Devices = () => {
             />
             {deleteError && <p className="text-red-400 text-sm mb-3">{deleteError}</p>}
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
+              <Button
+                variant="outline"
                 onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700"
               >
                 Hủy
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="destructive"
                 onClick={handleDeleteDevice}
                 disabled={deleting}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
               >
                 {deleting ? 'Đang xóa...' : 'Xóa thiết bị'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -60,10 +60,11 @@ def ensure_default_devices(db: Session) -> None:
         # don't crash the whole app at startup. The migration step should fix schema.
         db.rollback()
         return
+    # Mật khẩu thiết bị được hash bcrypt (giống user) — dùng cho WS ESP32 auth.
     seeds = [
-        Device(device_id=1, devicename="Motor DEV001", password="dev001", status="active", user_device_asignment_id=0),
-        Device(device_id=2, devicename="Motor DEV002", password="dev002", status="active", user_device_asignment_id=0),
-        Device(device_id=3, devicename="Motor DEV003", password="dev003", status="active", user_device_asignment_id=0),
+        Device(device_id=1, devicename="Motor DEV001", password=hash_password("dev001"), status="active", user_device_asignment_id=0),
+        Device(device_id=2, devicename="Motor DEV002", password=hash_password("dev002"), status="active", user_device_asignment_id=0),
+        Device(device_id=3, devicename="Motor DEV003", password=hash_password("dev003"), status="active", user_device_asignment_id=0),
     ]
     for d in seeds:
         db.add(d)

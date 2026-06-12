@@ -11,8 +11,17 @@ Lưu ý ``settings_customise_sources``: thứ tự nguồn cấu hình được 
 ghi đè ``.env`` khi deploy (Docker/K8s).
 """
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 from sqlalchemy.engine import URL
+
+# Giá trị placeholder không được phép tồn tại khi chạy production.
+_UNSAFE_DEFAULTS = {
+    "change-me-in-production",
+    "change-me-to-a-long-random-string",
+    "CHANGE_ME_APP_PASSWORD",
+    "CHANGE_ME_INFLUX_TOKEN",
+}
 
 
 class Settings(BaseSettings):
@@ -79,6 +88,30 @@ class Settings(BaseSettings):
     influx_org: str = "iot"
     influx_bucket: str = "iot_telemetry"
     influx_measurement: str = "sensor_readings"
+
+    @model_validator(mode="after")
+    def _guard_prod_secrets(self) -> "Settings":
+        """Chặn khởi động nếu chạy ``prod`` mà còn secret placeholder.
+
+        Tránh deploy nhầm với ``jwt_secret`` mặc định (forge JWT) hoặc token/password
+        chưa đổi. Chỉ áp dụng khi ``environment`` là production để không cản trở dev.
+        """
+        if self.environment.lower() not in {"prod", "production"}:
+            return self
+        offenders: list[str] = []
+        if self.jwt_secret in _UNSAFE_DEFAULTS or len(self.jwt_secret) < 32:
+            offenders.append("JWT_SECRET (đặt chuỗi ngẫu nhiên >= 32 ký tự)")
+        if self.db_password in _UNSAFE_DEFAULTS:
+            offenders.append("DB_PASSWORD")
+        if self.influx_enabled and self.influx_token in _UNSAFE_DEFAULTS:
+            offenders.append("INFLUX_TOKEN")
+        if offenders:
+            raise RuntimeError(
+                "Cấu hình production không an toàn — secret còn giá trị mặc định: "
+                + ", ".join(offenders)
+                + ". Đặt biến môi trường tương ứng trước khi chạy."
+            )
+        return self
 
     @property
     def database_url(self) -> str:

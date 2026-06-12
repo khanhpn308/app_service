@@ -15,9 +15,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.core.db import SessionLocal, engine
 from app.core.db_migrate import (
     ensure_device_authorization_granted_by_varchar,
@@ -178,10 +181,23 @@ def create_app() -> FastAPI:
     """
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
+    # Rate limiter (slowapi) — chống brute-force endpoint auth.
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
     origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    is_prod = settings.environment.lower() in {"prod", "production"}
+    if not origins:
+        if is_prod:
+            # Không bao giờ dùng "*" với allow_credentials=True (browser từ chối + rủi ro CSRF).
+            raise RuntimeError(
+                "CORS_ORIGINS rỗng khi chạy production. Liệt kê origin frontend tường minh."
+            )
+        # Chỉ dev mới fallback localhost cho tiện.
+        origins = ["http://localhost:3000", "http://localhost:5173", "http://localhost"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins or ["*"],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

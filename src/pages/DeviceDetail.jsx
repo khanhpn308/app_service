@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { mockDevices, generateDeviceHistory } from '../data/mockData';
 import { apiFetch } from '../lib/api';
+import { wsUrl } from '../lib/wsUrl';
 import { useAuth } from '../contexts/AuthContext';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 
@@ -284,7 +285,7 @@ const DeviceDetail = () => {
     // - { ts, current, voltage, temperature, vibration }  (implicit current device)
     // Nếu có topic, dùng global channel rồi lọc theo topic để tránh lệch device_id DB vs payload.
     const url = WS_BASE
-      ? (preferredTopic ? `${WS_BASE}/ws/global` : `${WS_BASE}/ws/devices/${deviceId}`)
+      ? (preferredTopic ? wsUrl('/ws/global', WS_BASE) : wsUrl(`/ws/devices/${deviceId}`, WS_BASE))
       : null;
     if (!url) return undefined;
 
@@ -315,15 +316,15 @@ const DeviceDetail = () => {
           return;
         }
 
-        const tsMs = normalizeEventTsToMs(ts);
+                const tsMs = normalizeEventTsToMs(ts);
         const time = formatTime(tsMs);
 
-        const current = Number(msg.current);
+                const current = Number(msg.current);
         const voltage = Number(msg.voltage);
         const temperature = Number(msg.temperature);
         const vibration = Number(msg.vibration ?? msg.vibration_mms ?? msg.vibrationMmS);
         const x = Number(msg.x ?? msg.longitude);
-        const y = Number(msg.y ?? msg.latitude);
+      const y = Number(msg.y ?? msg.latitude);
 
         setRealtimeSeries((prev) =>
           capPush(prev, {
@@ -472,8 +473,19 @@ const DeviceDetail = () => {
           </div>
           {device.type === 'GPS' ? (
             <div className="text-white">
-              <p className="text-sm mb-2">X: <span className="text-blue-400 font-bold text-lg">{apiDetail?.x ?? device.x ?? '—'}</span></p>
-              <p className="text-sm">Y: <span className="text-blue-400 font-bold text-lg">{apiDetail?.y ?? device.y ?? '—'}</span></p>
+              {(() => {
+                const latest = realtimeSeries[realtimeSeries.length - 1];
+                const rawX = latest?.x ?? apiDetail?.x ?? device.x ?? '—';
+                const rawY = latest?.y ?? apiDetail?.y ?? device.y ?? '—';
+                const displayX = Number.isFinite(Number(rawX)) ? Number(rawX).toFixed(2) : rawX;
+                const displayY = Number.isFinite(Number(rawY)) ? Number(rawY).toFixed(2) : rawY;
+                return (
+                  <>
+                    <p className="text-sm mb-2">X: <span className="text-blue-400 font-bold text-lg">{displayX}</span></p>
+                    <p className="text-sm">Y: <span className="text-blue-400 font-bold text-lg">{displayY}</span></p>
+                  </>
+                );
+              })()}
             </div>
           ) : (
             <p className="text-white text-2xl font-bold">
@@ -737,7 +749,7 @@ const DeviceDetail = () => {
                         </td>
                         <td className="px-6 py-4 text-white font-medium">
                               {device.type === 'GPS'
-                                ? `X=${record.x.toFixed(6)} | Y=${record.y.toFixed(6)}`
+                                ? `X=${record.x.toFixed(2)} | Y=${record.y.toFixed(2)}`
                                 : `T=${record.temperature.toFixed(2)}°C | Vb=${record.vibration.toFixed(2)}mm/s | U=${record.voltage.toFixed(2)}V | I=${record.current.toFixed(2)}A`}
                         </td>
                         <td className="px-6 py-4 text-slate-400 text-sm">
@@ -937,7 +949,7 @@ const DeviceDetail = () => {
                                 <div className="bg-slate-900 rounded p-3 border border-slate-700 shrink-0">
                                   <p className="text-slate-400 text-xs mb-2">Latest Reading:</p>
                                   <p className="text-white font-mono text-sm break-all">
-                                    X: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].x.toFixed(6)}</span>, Y: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].y.toFixed(6)}</span>
+                                    X: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].x.toFixed(2)}</span>, Y: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].y.toFixed(2)}</span>
                                   </p>
                                   <p className="text-slate-400 text-xs mt-1">Points: {realtimeSeries.length}</p>
                                 </div>

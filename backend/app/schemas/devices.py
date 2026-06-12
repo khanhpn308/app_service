@@ -63,12 +63,14 @@ class DeviceAuthorizedUser(BaseModel):
 
 
 class DeviceDetailPublic(BaseModel):
-    """Chi tiết thiết bị: mật khẩu cho mọi người có quyền; user_device_asignment_id chỉ admin."""
+    """Chi tiết thiết bị. Mật khẩu KHÔNG trả về (đã hash bcrypt, chỉ dùng cho WS ESP32 auth).
+
+    Admin biết mật khẩu lúc tạo/đổi; client không cần đọc lại từ DB.
+    """
 
     device_id: int
     devicename: str | None = None
     status: str | None = None
-    password: str | None = None
     location: str | None = None
     device_type: str | None = None
     topic: str | None = None
