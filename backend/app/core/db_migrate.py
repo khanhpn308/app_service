@@ -255,3 +255,74 @@ def ensure_test_logs_table(engine: Engine) -> None:
             if (r.scalar() or 0) > 0:
                 conn.execute(text(f"ALTER TABLE `test_logs` DROP COLUMN `{col_name}`"))
     logger.info("db_migrate: ensure_test_logs_table OK")
+
+
+def _column_exists(conn, table: str, column: str) -> bool:
+    r = conn.execute(
+        text(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c"
+        ),
+        {"t": table, "c": column},
+    )
+    return (r.scalar() or 0) > 0
+
+
+def ensure_schema_hardening(engine: Engine) -> None:
+    """Áp các thay đổi Phase 3 cho volume DB cũ (đồng bộ với 009_schema_hardening.sql).
+
+    - device.password -> VARCHAR(255); user.phone -> VARCHAR(20); user.cccd -> DECIMAL(12,0)
+    - status ENUM thêm 'inactive'
+    - updated_at cho user/device/device_authorization
+    - index device(user_device_asignment_id)
+    - FK device_authorization -> ON DELETE/UPDATE CASCADE
+
+    Idempotent: kiểm tra trước khi ALTER. Lỗi từng bước không làm sập app (chỉ log).
+    """
+    try:
+        with engine.begin() as conn:
+            # Kiểu cột (MODIFY idempotent — chạy lại an toàn).
+            conn.execute(text("ALTER TABLE `device` MODIFY COLUMN `password` VARCHAR(255) NULL"))
+            conn.execute(text("ALTER TABLE `user` MODIFY COLUMN `phone` VARCHAR(20) NULL"))
+            conn.execute(text("ALTER TABLE `user` MODIFY COLUMN `cccd` DECIMAL(12,0) NOT NULL"))
+            conn.execute(text("ALTER TABLE `user` MODIFY COLUMN `status` ENUM('active','deactive','inactive') NOT NULL"))
+            conn.execute(text("ALTER TABLE `device` MODIFY COLUMN `status` ENUM('active','deactive','inactive') NULL"))
+
+            # updated_at
+            for table in ("user", "device", "device_authorization"):
+                if not _column_exists(conn, table, "updated_at"):
+                    conn.execute(text(
+                        f"ALTER TABLE `{table}` ADD COLUMN `updated_at` DATETIME NOT NULL "
+                        "DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+                    ))
+
+            # index device(user_device_asignment_id)
+            r = conn.execute(text(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'device' "
+                "AND INDEX_NAME = 'idx_device_user_assignment'"
+            ))
+            if (r.scalar() or 0) == 0:
+                conn.execute(text(
+                    "ALTER TABLE `device` ADD INDEX `idx_device_user_assignment` (`user_device_asignment_id`)"
+                ))
+
+            # FK cascade — drop + recreate nếu constraint cũ tồn tại với rule khác.
+            for fk, col, ref_table, ref_col in (
+                ("fk_device_has_user_device", "device_id", "device", "device_id"),
+                ("fk_device_has_user_user1", "user_id", "user", "user_id"),
+            ):
+                rule = conn.execute(text(
+                    "SELECT DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS "
+                    "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = :n"
+                ), {"n": fk}).scalar()
+                if rule is not None and rule != "CASCADE":
+                    conn.execute(text(f"ALTER TABLE `device_authorization` DROP FOREIGN KEY `{fk}`"))
+                    conn.execute(text(
+                        f"ALTER TABLE `device_authorization` ADD CONSTRAINT `{fk}` "
+                        f"FOREIGN KEY (`{col}`) REFERENCES `{ref_table}` (`{ref_col}`) "
+                        "ON DELETE CASCADE ON UPDATE CASCADE"
+                    ))
+        logger.info("db_migrate: ensure_schema_hardening OK")
+    except Exception:
+        logger.warning("db_migrate: ensure_schema_hardening gặp lỗi (bỏ qua, không sập app)", exc_info=True)

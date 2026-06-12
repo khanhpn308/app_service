@@ -27,7 +27,7 @@ class RegisterRequest(BaseModel):
     fullname: str = Field(..., min_length=1, max_length=45)
     cccd: Decimal = Field(..., description="12-digit citizen ID")
     email: str | None = Field(default=None, max_length=45)
-    phone: int | None = None
+    phone: str | None = Field(default=None, max_length=20)
     expired_at: date = Field(..., description="Last valid day (inclusive); 0 remaining days => deactive")
     role: Literal["admin", "user"]
 
@@ -52,7 +52,7 @@ class UserPublic(BaseModel):
     fullname: str
     cccd: Decimal
     email: str | None
-    phone: int | None
+    phone: str | None
     creat_at: date
     expired_at: date | None
     status: str
@@ -122,7 +122,7 @@ class BootstrapRequest(BaseModel):
     fullname: str = Field(..., min_length=1, max_length=45)
     cccd: Decimal
     email: str | None = Field(default=None, max_length=45)
-    phone: int | None = None
+    phone: str | None = Field(default=None, max_length=20)
     expired_at: date | None = Field(default=None, description="Defaults to 2099-12-31 if omitted")
 
     @field_validator("cccd")

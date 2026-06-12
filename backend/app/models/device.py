@@ -7,7 +7,9 @@ Model ORM: bảng ``device`` — thiết bị IoT (định danh tĩnh, không l�
 - **location / device_type**: hiển thị/phân loại; dữ liệu sống từ MQTT không lưu ở đây (xem ``db_migrate`` đã bỏ cột last_reading*).
 """
 
-from sqlalchemy import Integer, String
+from datetime import datetime
+
+from sqlalchemy import DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -20,7 +22,8 @@ class Device(Base):
 
     device_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     devicename: Mapped[str | None] = mapped_column(String(45), nullable=True)
-    password: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    # Bcrypt hash mật khẩu thiết bị (WS ESP32 auth) — VARCHAR(255).
+    password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # Legacy NOT NULL column from original schema (name is misspelled "asignment").
     # Not used for RBAC: which user may access which device is in `device_authorization`.
@@ -33,3 +36,6 @@ class Device(Base):
     topic: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Persisted MQTT publish topic used for server -> device messages (e.g. ping echo/downlink).
     publish_topic: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, server_default=func.now(), onupdate=func.now()
+    )

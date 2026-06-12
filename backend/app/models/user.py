@@ -12,9 +12,9 @@ Cột quan trọng:
 Lưu ý: ``creat_at`` là tên cột lịch sử (typo *creat* thay vì *created*).
 """
 
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Date, Integer, Numeric, String
+from sqlalchemy import Date, DateTime, Integer, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -32,8 +32,12 @@ class User(Base):
     fullname: Mapped[str] = mapped_column(String(45), nullable=False)
     cccd: Mapped[float] = mapped_column(Numeric(12, 0), unique=True, nullable=False)
     email: Mapped[str | None] = mapped_column(String(45), nullable=True)
-    phone: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # VARCHAR để giữ số 0 đầu / dấu +, định dạng số điện thoại quốc tế (trước đây là INT).
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     creat_at: Mapped[object] = mapped_column("creat_at", Date, nullable=False)
     expired_at: Mapped[date | None] = mapped_column("expired_at", Date, nullable=True)
     status: Mapped[str] = mapped_column(String(10), nullable=False)
     role: Mapped[str] = mapped_column(String(10), nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, server_default=func.now(), onupdate=func.now()
+    )
