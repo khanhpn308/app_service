@@ -44,7 +44,7 @@ export default function TopicManagement() {
       setTopicMap(nextMap);
       setPublishTopicMap(nextPublishMap);
     } catch (err) {
-      setError(err?.message || 'Khong tai duoc du lieu topic');
+      setError(err?.message || 'Không tải được dữ liệu topic');
     } finally {
       setLoading(false);
     }
@@ -72,10 +72,10 @@ export default function TopicManagement() {
           publish_topic: publishTopic || null,
         }),
       });
-      setOkMsg(`Da luu topic nhan/gui cho device ${deviceId}`);
+      setOkMsg(`Đã lưu topic nhận/gửi cho device ${deviceId}`);
       await loadAll();
     } catch (err) {
-      setError(err?.message || 'Luu topic that bai');
+      setError(err?.message || 'Lưu topic thất bại');
     } finally {
       setSavingId(null);
     }
@@ -85,33 +85,33 @@ export default function TopicManagement() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Quan ly topic MQTT</h1>
-          <p className="text-slate-400">Admin luu topic tren bang device va backend se auto subscribe.</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Quản lý topic MQTT</h1>
+          <p className="text-muted-foreground">Admin lưu topic trên bảng device và backend sẽ tự động subscribe.</p>
         </div>
         <button
           type="button"
           onClick={loadAll}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-card border border-border text-foreground/90 hover:bg-muted"
         >
           <RefreshCw className="h-4 w-4" />
-          Lam moi
+          Làm mới
         </button>
       </div>
 
       {error && <div className="p-3 rounded-lg bg-red-900/30 border border-red-700 text-red-200 text-sm">{error}</div>}
       {okMsg && <div className="p-3 rounded-lg bg-emerald-900/30 border border-emerald-700 text-emerald-200 text-sm">{okMsg}</div>}
 
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+      <div className="bg-card rounded-xl border border-border p-4">
         <div className="flex items-center gap-2 mb-3">
           <RadioTower className="h-4 w-4 text-cyan-400" />
-          <h2 className="text-white font-semibold">Topic runtime dang subscribe</h2>
+          <h2 className="text-foreground font-semibold">Topic runtime đang subscribe</h2>
         </div>
         {sortedRuntimeTopics.length === 0 ? (
-          <p className="text-slate-400 text-sm">Chua co topic nao.</p>
+          <p className="text-muted-foreground text-sm">Chưa có topic nào.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {sortedRuntimeTopics.map((t) => (
-              <span key={t} className="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-200 text-xs">
+              <span key={t} className="px-2 py-1 rounded bg-background border border-border text-foreground/90 text-xs">
                 {t}
               </span>
             ))}
@@ -119,33 +119,33 @@ export default function TopicManagement() {
         )}
       </div>
 
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-700 text-slate-300 text-sm">
-          Gan topic nhan/topic gui theo tung thiet bi (bo trong de xoa gia tri).
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="px-4 py-3 border-b border-border text-foreground/90 text-sm">
+          Gán topic nhận/topic gửi theo từng thiết bị (bỏ trống để xoá giá trị).
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-slate-900 border-b border-slate-700">
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Device ID</th>
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Ten thiet bi</th>
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Trang thai</th>
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Topic nhan (subscribe)</th>
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Topic gui (publish)</th>
-                <th className="px-4 py-3 text-left text-slate-300 text-sm">Action</th>
+              <tr className="bg-background border-b border-border">
+                <th className="px-4 py-3 text-left text-foreground/90 text-sm">Device ID</th>
+                <th className="px-4 py-3 text-left text-foreground/90 text-sm">Tên thiết bị</th>
+                <th className="px-4 py-3 text-left text-foreground/90 text-sm">Trạng thái</th>
+                <th className="px-4 py-3 text-left text-foreground/90 text-sm">Topic nhan (subscribe)</th>
+                <th className="px-4 py-3 text-left text-foreground/90 text-sm">Topic gui (publish)</th>
+                <th className="px-4 py-3 text-left text-foreground/90 text-sm">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={6}>Dang tai...</td>
+                  <td className="px-4 py-4 text-muted-foreground" colSpan={6}>Đang tải...</td>
                 </tr>
               ) : (
                 devices.map((d) => (
-                  <tr key={d.device_id} className="hover:bg-slate-900/40">
-                    <td className="px-4 py-3 text-blue-400 font-mono">{d.device_id}</td>
-                    <td className="px-4 py-3 text-white">{d.devicename}</td>
-                    <td className="px-4 py-3 text-slate-300">{d.status}</td>
+                  <tr key={d.device_id} className="hover:bg-background/40">
+                    <td className="px-4 py-3 text-primary font-mono">{d.device_id}</td>
+                    <td className="px-4 py-3 text-foreground">{d.devicename}</td>
+                    <td className="px-4 py-3 text-foreground/90">{d.status}</td>
                     <td className="px-4 py-3 min-w-[320px]">
                       <input
                         type="text"
@@ -157,7 +157,7 @@ export default function TopicManagement() {
                           }))
                         }
                         placeholder="devices/101/telemetry"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
+                        className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
                       />
                     </td>
                     <td className="px-4 py-3 min-w-[320px]">
@@ -171,7 +171,7 @@ export default function TopicManagement() {
                           }))
                         }
                         placeholder="devices/101/downlink"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-white"
+                        className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -179,10 +179,10 @@ export default function TopicManagement() {
                         type="button"
                         disabled={savingId === d.device_id}
                         onClick={() => saveTopic(d.device_id)}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 text-foreground disabled:opacity-50"
                       >
                         <Save className="h-4 w-4" />
-                        {savingId === d.device_id ? 'Dang luu...' : 'Luu'}
+                        {savingId === d.device_id ? 'Đang lưu...' : 'Lưu'}
                       </button>
                     </td>
                   </tr>

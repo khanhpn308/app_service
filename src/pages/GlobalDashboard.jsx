@@ -12,6 +12,7 @@ import { Activity, Gauge, Maximize2, Minimize2, Thermometer, Waves, Zap } from '
 import { apiFetch } from '../lib/api';
 import { wsUrl } from '../lib/wsUrl';
 import { useAuth } from '../contexts/AuthContext';
+import { PageHeader } from '../components/common/PageHeader';
 
 function resolveWsBase() {
   const envBase = String(import.meta.env.VITE_WS_URL ?? '').trim();
@@ -127,10 +128,17 @@ function MetricBarChartCard({
 }) {
   const yDomain = useMemo(() => computeYAxisDomain(data, dataKey), [data, dataKey]);
   const deviceCount = data.length;
+  // "Rỗng" = không có thiết bị nào trong nhóm có giá trị > 0 cho chỉ số này.
+  // Khi đó hiển thị empty state thay vì trục trống (gây hiểu nhầm là lỗi/treo).
+  const hasData = useMemo(
+    () => data.some((d) => Number.isFinite(Number(d[dataKey])) && Number(d[dataKey]) > 0),
+    [data, dataKey]
+  );
+  const chartHeight = isFullscreen ? 520 : 300;
 
   return (
     <div
-      className={`bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-lg ${
+      className={`bg-card text-card-foreground rounded-xl p-6 border border-border shadow-lg ${
         isFullscreen ? 'fixed inset-4 z-[80] overflow-hidden' : ''
       }`}
     >
@@ -140,52 +148,69 @@ function MetricBarChartCard({
             <Icon className="h-5 w-5" style={{ color }} />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">{title}</h3>
-            <p className="text-slate-400 text-sm">{subtitle}</p>
+            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+            <p className="text-muted-foreground text-sm">{subtitle}</p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => onToggleFullscreen(chartKey)}
-          className="p-2 rounded-lg border border-slate-600 hover:bg-slate-700 text-slate-200"
-          title={isFullscreen ? 'Thu nho bieu do' : 'Phong to bieu do'}
+          className="p-2 rounded-lg border border-border hover:bg-muted text-foreground/90"
+          title={isFullscreen ? 'Thu nhỏ biểu đồ' : 'Phóng to biểu đồ'}
         >
           {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </button>
       </div>
 
-      <ResponsiveContainer width="100%" height={isFullscreen ? 520 : 300}>
-        <BarChart
-          data={data}
-          margin={{ top: 8, right: 16, left: 0, bottom: 8 }}
-          barCategoryGap={getCategoryGap(deviceCount)}
-          barSize={getBarSize(deviceCount)}
+      {hasData ? (
+        <ResponsiveContainer width="100%" height={chartHeight}>
+          <BarChart
+            data={data}
+            margin={{ top: 8, right: 16, left: 0, bottom: 8 }}
+            barCategoryGap={getCategoryGap(deviceCount)}
+            barSize={getBarSize(deviceCount)}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+            <XAxis
+              dataKey="deviceId"
+              stroke="#94a3b8"
+              tick={false}
+              height={12}
+            />
+            <YAxis
+              domain={yDomain}
+              stroke="#94a3b8"
+              tick={{ fill: '#94a3b8', fontSize: 12 }}
+              width={46}
+              allowDecimals
+            />
+            <Tooltip
+              contentStyle={chartTooltipStyle}
+              // Cursor mờ nhẹ thay cho ô xám đặc mặc định của recharts (vốn phủ kín
+              // category band → khối xám lớn che plot khi chỉ có 1-2 thiết bị).
+              cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }}
+              formatter={(value) => [`${toFiniteNumber(value).toFixed(2)} ${unit}`, title]}
+              labelFormatter={(label, payload) => {
+                const deviceName = payload?.[0]?.payload?.deviceName;
+                return `Device: ${deviceName || label}`;
+              }}
+            />
+            <Bar dataKey={dataKey} fill={color} radius={[6, 6, 0, 0]} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <div
+          role="status"
+          className="flex flex-col items-center justify-center text-center"
+          style={{ height: chartHeight }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis
-            dataKey="deviceId"
-            stroke="#94a3b8"
-            tick={false}
-            height={12}
-          />
-          <YAxis
-            domain={yDomain}
-            stroke="#94a3b8"
-            tick={{ fill: '#94a3b8', fontSize: 12 }}
-            width={46}
-            allowDecimals
-          />
-          <Tooltip
-            contentStyle={chartTooltipStyle}
-            formatter={(value) => [`${toFiniteNumber(value).toFixed(2)} ${unit}`, title]}
-            labelFormatter={(label, payload) => {
-              const deviceName = payload?.[0]?.payload?.deviceName;
-              return `Device: ${deviceName || label}`;
-            }}
-          />
-          <Bar dataKey={dataKey} fill={color} radius={[6, 6, 0, 0]} isAnimationActive={false} />
-        </BarChart>
-      </ResponsiveContainer>
+          <Icon className="h-10 w-10 mb-3 opacity-40" style={{ color }} />
+          <p className="text-foreground/80 text-sm font-medium">Chưa có dữ liệu</p>
+          <p className="text-muted-foreground text-xs mt-1 max-w-xs">
+            Chưa nhận được telemetry cho chỉ số này. Dữ liệu sẽ hiển thị khi thiết bị gửi số đo.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -271,7 +296,7 @@ export default function GlobalDashboard() {
         }
       } catch (err) {
         if (!mounted) return;
-        setLoadError(err?.message || 'Khong tai duoc danh sach thiet bi');
+        setLoadError(err?.message || 'Không tải được danh sách thiết bị');
       } finally {
         if (mounted) setLoadingDevices(false);
       }
@@ -425,21 +450,21 @@ export default function GlobalDashboard() {
   );
 
   const scopeLabel = isAdmin()
-    ? 'Tong quan tat ca thiet bi (admin)'
-    : 'Tong quan thiet bi duoc phan quyen (user)';
+    ? 'Tổng quan tất cả thiết bị (admin)'
+    : 'Tổng quan thiết bị được phân quyền (user)';
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Global Dashboard</h1>
-          <p className="text-slate-400">{scopeLabel}</p>
-        </div>
-        <div className="flex items-center space-x-2 bg-slate-800 px-4 py-2 rounded-lg border border-slate-700">
-          <Activity className="h-5 w-5 text-green-500 animate-pulse" />
-          <span className="text-slate-300 text-sm">Live - {dashboardData.length} devices</span>
-        </div>
-      </div>
+      <PageHeader
+        title="Global Dashboard"
+        description={scopeLabel}
+        actions={
+          <div className="flex items-center space-x-2 bg-card px-4 py-2 rounded-lg border border-border">
+            <Activity className="h-5 w-5 text-green-500 animate-pulse" />
+            <span className="text-muted-foreground text-sm">Live - {dashboardData.length} devices</span>
+          </div>
+        }
+      />
 
       {loadError && (
         <div className="p-3 rounded-lg bg-red-900/30 border border-red-700 text-red-200 text-sm">
@@ -448,12 +473,12 @@ export default function GlobalDashboard() {
       )}
       {!WS_BASE && (
         <div className="p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-200 text-sm">
-          Missing <span className="font-semibold">VITE_WS_URL</span>. Dashboard chua nhan realtime.
+          Thiếu <span className="font-semibold">VITE_WS_URL</span>. Dashboard chưa nhận dữ liệu realtime.
         </div>
       )}
       {loadingDevices && (
-        <div className="p-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-sm">
-          Dang tai danh sach thiet bi...
+        <div className="p-3 rounded-lg bg-card border border-border text-muted-foreground text-sm">
+          Đang tải danh sách thiết bị...
         </div>
       )}
 
@@ -461,7 +486,7 @@ export default function GlobalDashboard() {
         <MetricBarChartCard
           chartKey="current"
           title="Current (A)"
-          subtitle="Truc X: thiet bi - Truc Y: gia tri"
+          subtitle="Trục X: thiết bị · Trục Y: giá trị"
           icon={Gauge}
           iconClassName="bg-blue-500/20"
           data={powerData}
@@ -476,7 +501,7 @@ export default function GlobalDashboard() {
         <MetricBarChartCard
           chartKey="voltage"
           title="Voltage (V)"
-          subtitle="Truc X: thiet bi - Truc Y: gia tri"
+          subtitle="Trục X: thiết bị · Trục Y: giá trị"
           icon={Zap}
           iconClassName="bg-purple-500/20"
           data={powerData}
@@ -491,7 +516,7 @@ export default function GlobalDashboard() {
         <MetricBarChartCard
           chartKey="temperature"
           title="Temperature (°C)"
-          subtitle="Truc X: thiet bi - Truc Y: gia tri"
+          subtitle="Trục X: thiết bị · Trục Y: giá trị"
           icon={Thermometer}
           iconClassName="bg-red-500/20"
           data={temperatureData}
@@ -506,7 +531,7 @@ export default function GlobalDashboard() {
         <MetricBarChartCard
           chartKey="vibration"
           title="Vibration (mm/s)"
-          subtitle="Truc X: thiet bi - Truc Y: gia tri"
+          subtitle="Trục X: thiết bị · Trục Y: giá trị"
           icon={Waves}
           iconClassName="bg-emerald-500/20"
           data={vibrationData}

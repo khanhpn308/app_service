@@ -112,20 +112,20 @@ export default function AssignDeviceModal({ user, currentAdmin, onClose, onSucce
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-      <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-lg w-full shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-slate-700">
+      <div className="bg-card border border-border rounded-xl max-w-lg w-full shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-white truncate">Phân quyền thiết bị</h2>
-            <p className="text-slate-400 text-sm truncate">
-              User: <span className="text-slate-200 font-semibold">{user.fullname}</span> (@{user.username})
+            <h2 className="text-lg font-semibold text-foreground truncate">Phân quyền thiết bị</h2>
+            <p className="text-muted-foreground text-sm truncate">
+              User: <span className="text-foreground/90 font-semibold">{user.fullname}</span> (@{user.username})
             </p>
             {currentAdmin?.fullname && (
-              <p className="text-slate-500 text-xs">
-                Admin: <span className="text-slate-300">{currentAdmin.fullname}</span>
+              <p className="text-muted-foreground text-xs">
+                Admin: <span className="text-foreground/90">{currentAdmin.fullname}</span>
               </p>
             )}
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-slate-700 text-slate-400">
+          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-card text-muted-foreground">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -136,12 +136,12 @@ export default function AssignDeviceModal({ user, currentAdmin, onClose, onSucce
           )}
 
           <div>
-            <label className="block text-sm text-slate-300 mb-1">Thiết bị</label>
+            <label className="block text-sm text-foreground/90 mb-1">Thiết bị</label>
             <select
               value={deviceId}
               disabled={loading || availableDevices.length === 0}
               onChange={(e) => setDeviceId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white disabled:opacity-50"
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground disabled:opacity-50"
             >
               {availableDevices.map((d) => (
                 <option key={d.device_id} value={String(d.device_id)}>
@@ -150,26 +150,26 @@ export default function AssignDeviceModal({ user, currentAdmin, onClose, onSucce
               ))}
               {availableDevices.length === 0 && <option value="">Không còn thiết bị để cấp</option>}
             </select>
-            <p className="text-slate-500 text-xs mt-1">Chỉ hiển thị các thiết bị chưa được cấp cho user này.</p>
+            <p className="text-muted-foreground text-xs mt-1">Chỉ hiển thị các thiết bị chưa được cấp cho user này.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-slate-300 mb-1">granted_at</label>
+              <label className="block text-sm text-foreground/90 mb-1">granted_at</label>
               <input
                 type="date"
                 value={grantedAt}
                 onChange={(e) => setGrantedAt(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-300 mb-1">expired_at</label>
+              <label className="block text-sm text-foreground/90 mb-1">expired_at</label>
               <input
                 type="date"
                 value={expiredAt}
                 onChange={(e) => setExpiredAt(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground"
               />
             </div>
           </div>
@@ -182,14 +182,14 @@ export default function AssignDeviceModal({ user, currentAdmin, onClose, onSucce
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg"
+              className="px-4 py-2 bg-card hover:bg-muted text-foreground rounded-lg"
             >
               Hủy
             </button>
             <button
               type="submit"
               disabled={submitting || loading || availableDevices.length === 0}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
+              className="px-4 py-2 bg-primary hover:bg-primary/90 text-foreground rounded-lg disabled:opacity-50"
             >
               {submitting ? 'Đang lưu...' : 'Submit'}
             </button>

@@ -1,38 +1,32 @@
 import React, { useMemo } from 'react';
 import { Activity, AlertTriangle, Cpu, Wifi, WifiOff } from 'lucide-react';
 import { deviceStatsSummary, mockDevices, mockRecentAlerts } from '../data/mockData';
+import { PageHeader } from '../components/common/PageHeader';
+import { StatCard } from '../components/common/StatCard';
+import { Panel } from '../components/common/Panel';
+import { toUiStatus } from '../lib/deviceStatus';
 
 export default function Home() {
   const alerts = useMemo(() => mockRecentAlerts(), []);
 
-  const StatCard = ({ title, value, icon: Icon, color, subtitle }) => (
-    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-lg hover:shadow-xl transition-all duration-200">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-slate-400 text-sm font-medium mb-2">{title}</p>
-          <p className={`text-3xl font-bold ${color}`}>{value}</p>
-          {subtitle && <p className="text-slate-500 text-xs mt-2">{subtitle}</p>}
-        </div>
-        <div className={`p-3 rounded-lg ${color.replace('text', 'bg').replace('500', '500/20')}`}>
-          <Icon className={`h-6 w-6 ${color}`} />
-        </div>
-      </div>
-    </div>
-  );
-
-  const statusLabel = (status) => (status === 'online' ? 'Online' : 'Offline');
+  const statusLabel = (status) => (toUiStatus(status) === 'online' ? 'Online' : 'Offline');
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Home</h1>
-          <p className="text-slate-400">Overview / tình trạng tổng quan hệ thống</p>
-        </div>
-        <div className="flex items-center space-x-2 bg-slate-800 px-4 py-2 rounded-lg border border-slate-700">
-          <Activity className="h-5 w-5 text-green-500 animate-pulse" />
-          <span className="text-slate-300 text-sm">System Active</span>
-        </div>
+      <PageHeader
+        title="Home"
+        description="Overview / tình trạng tổng quan hệ thống"
+        actions={
+          <div className="flex items-center space-x-2 bg-card px-4 py-2 rounded-lg border border-border">
+            <Activity className="h-5 w-5 text-green-500 animate-pulse" />
+            <span className="text-muted-foreground text-sm">System Active</span>
+          </div>
+        }
+      />
+
+      {/* Demo data notice — trang này chưa kết nối API thật (backend chưa có endpoint summary/alerts). */}
+      <div className="p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-200 text-sm">
+        Dữ liệu trên trang này là <strong>demo</strong> (chưa kết nối API thật).
       </div>
 
       {/* KPI Cards */}
@@ -68,42 +62,42 @@ export default function Home() {
       </div>
 
       {/* Latest Alerts / Events */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
-        <div className="px-6 py-5 border-b border-slate-700 flex items-center justify-between">
+      <Panel className="overflow-hidden">
+        <div className="px-6 py-5 border-b border-border flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">Latest Alerts / Events</h2>
-            <p className="text-slate-400 text-sm">Các cảnh báo/lỗi mới nhất</p>
+            <h2 className="text-xl font-bold text-foreground">Latest Alerts / Events</h2>
+            <p className="text-muted-foreground text-sm">Các cảnh báo/lỗi mới nhất</p>
           </div>
-          <span className="text-slate-400 text-sm">{alerts.length} items</span>
+          <span className="text-muted-foreground text-sm">{alerts.length} items</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-slate-900 border-b border-slate-700">
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Time</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Device</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Severity</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Message</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Status</th>
+              <tr className="bg-muted/40 border-b border-border">
+                <th className="px-6 py-4 text-left text-sm font-semibold text-muted-foreground">Time</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-muted-foreground">Device</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-muted-foreground">Severity</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-muted-foreground">Message</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-muted-foreground">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700">
+            <tbody className="divide-y divide-border">
               {alerts.map((a) => {
                 const sevColor =
                   a.severity === 'critical'
                     ? 'text-red-400'
                     : a.severity === 'warning'
                       ? 'text-amber-400'
-                      : 'text-slate-300';
+                      : 'text-muted-foreground';
                 const device = mockDevices.find((d) => d.id === a.deviceId);
                 return (
-                  <tr key={a.id} className="hover:bg-slate-900 transition-colors duration-150">
-                    <td className="px-6 py-4 text-slate-400 text-sm whitespace-nowrap">{a.time}</td>
-                    <td className="px-6 py-4 text-white font-medium whitespace-nowrap">{a.deviceId}</td>
+                  <tr key={a.id} className="hover:bg-muted/50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-muted-foreground text-sm whitespace-nowrap">{a.time}</td>
+                    <td className="px-6 py-4 text-foreground font-medium whitespace-nowrap">{a.deviceId}</td>
                     <td className={`px-6 py-4 text-sm font-semibold ${sevColor}`}>{a.severity.toUpperCase()}</td>
-                    <td className="px-6 py-4 text-slate-200 text-sm">{a.message}</td>
-                    <td className="px-6 py-4 text-slate-400 text-sm whitespace-nowrap">
+                    <td className="px-6 py-4 text-foreground/90 text-sm">{a.message}</td>
+                    <td className="px-6 py-4 text-muted-foreground text-sm whitespace-nowrap">
                       {device ? statusLabel(device.status) : '-'}
                     </td>
                   </tr>
@@ -111,7 +105,7 @@ export default function Home() {
               })}
               {alerts.length === 0 && (
                 <tr>
-                  <td className="px-6 py-10 text-center text-slate-400" colSpan={5}>
+                  <td className="px-6 py-10 text-center text-muted-foreground" colSpan={5}>
                     No alerts/events.
                   </td>
                 </tr>
@@ -119,8 +113,7 @@ export default function Home() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Panel>
     </div>
   );
 }
-

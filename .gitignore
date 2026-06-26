@@ -12,6 +12,7 @@ pnpm-debug.log*
 .env.local
 .env.production
 *.env
+!.env.example
 
 # Secrets (không commit)
 mosquitto/passwd

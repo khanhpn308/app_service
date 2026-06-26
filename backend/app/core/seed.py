@@ -7,7 +7,6 @@ Hàm ``ensure_*`` idempotent: nếu dữ liệu đã có thì thoát sớm (trá
 """
 
 from datetime import date
-from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.exc import OperationalError
@@ -20,7 +19,7 @@ from app.models.user import User
 DEFAULT_ADMIN_USERNAME = "AD00000"
 # Default password for first-time setup; change after login in production.
 DEFAULT_ADMIN_PASSWORD = "khanhxx007"
-DEFAULT_ADMIN_CCCD = Decimal("888888888888")
+DEFAULT_ADMIN_CCCD = "888888888888"
 
 
 def ensure_default_admin(db: Session) -> None:

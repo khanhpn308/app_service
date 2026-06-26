@@ -202,3 +202,32 @@
   background-color: var(--primary) !important;
   opacity: 0.9;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   App dùng dark slate theme CỐ ĐỊNH (bg-slate-900 + primary blue).
+   Token mặc định từ generated/webflow.css cho ra màu sai (card #191919,
+   primary đen, background trắng), nên override tại đây để các component
+   shadcn (Button, Dialog, Input...) và class token (bg-card, bg-background)
+   khớp đúng palette đang dùng. Đặt cuối file để thắng độ ưu tiên.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --background: #0f172a;        /* slate-900 */
+  --foreground: #f8fafc;        /* slate-50  */
+  --card: #1e293b;              /* slate-800 */
+  --card-foreground: #f8fafc;
+  --popover: #1e293b;           /* slate-800 */
+  --popover-foreground: #f8fafc;
+  --primary: #2563eb;           /* blue-600 */
+  --primary-foreground: #ffffff;
+  --secondary: #334155;         /* slate-700 */
+  --secondary-foreground: #f8fafc;
+  --muted: #334155;             /* slate-700 */
+  --muted-foreground: #94a3b8;  /* slate-400 */
+  --accent: #1d4ed8;            /* blue-700 */
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;       /* red-600  */
+  --border: #334155;            /* slate-700 */
+  --input: #334155;             /* slate-700 */
+  --ring: #3b82f6;              /* blue-500 */
+  --radius: 0.75rem;            /* khớp rounded-xl dùng nhiều trong app */
+}

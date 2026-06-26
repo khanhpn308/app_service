@@ -1,15 +1,28 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Cpu, MapPin, Clock, ExternalLink, Plus, Search, Trash2 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { wsUrl } from '../lib/wsUrl';
+import { toUiStatus } from '../lib/deviceStatus';
 import AddDeviceModal from '../components/AddDeviceModal';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
+import { PageHeader } from '../components/common/PageHeader';
+import { StatusBadge } from '../components/common/StatusBadge';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '../components/ui/alert-dialog';
 
 const DeviceCardSkeleton = () => (
-  <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden p-6 space-y-4">
+  <div className="bg-card rounded-xl border border-border overflow-hidden p-6 space-y-4">
     <div className="flex items-center gap-3">
       <Skeleton className="h-10 w-10 rounded-lg" />
       <div className="space-y-2">
@@ -34,36 +47,33 @@ const normalizeDeviceType = (type) => {
 
 // Định nghĩa ở module-level + React.memo: không tái tạo type mỗi render (tránh remount
 // toàn bộ card) và bỏ qua re-render khi props của card không đổi.
-const DeviceCard = React.memo(function DeviceCard({ device, isAdmin, onDelete, onToggle }) {
+const DeviceCard = React.memo(function DeviceCard({ device, isAdmin, onDelete }) {
+  const online = device.status === 'online';
   return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg hover:shadow-xl hover:border-blue-500 transition-all duration-200 group">
+    <div className="bg-card text-card-foreground rounded-xl border border-border overflow-hidden shadow-lg hover:shadow-xl hover:border-primary transition-all duration-200 group">
       {/* Card Header */}
       <div className="p-6 pb-4">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center space-x-3">
-            <div className={`p-2 rounded-lg ${
-              device.status === 'online' ? 'bg-green-500/20' : 'bg-red-500/20'
-            }`}>
-              <Cpu className={`h-6 w-6 ${
-                device.status === 'online' ? 'text-green-500' : 'text-red-500'
-              }`} />
+            <div className={`p-2 rounded-lg ${online ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+              <Cpu className={`h-6 w-6 ${online ? 'text-green-500' : 'text-red-500'}`} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">
+              <h3 className="text-lg font-bold text-foreground group-hover:text-primary transition-colors">
                 {device.name}
               </h3>
-              <p className="text-slate-400 text-sm">{device.type}</p>
+              <p className="text-muted-foreground text-sm">{device.type}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-1">
             <Link
               to={`/devices/${device.id}`}
-              className="p-2 hover:bg-slate-700 rounded-lg transition-colors duration-200"
+              className="p-2 hover:bg-muted rounded-lg transition-colors duration-200"
               title="View Detail"
               aria-label={`View detail ${device.id}`}
             >
-              <ExternalLink className="h-5 w-5 text-slate-400 hover:text-blue-400" />
+              <ExternalLink className="h-5 w-5 text-muted-foreground hover:text-primary" />
             </Link>
             {isAdmin && (
               <Button
@@ -81,89 +91,71 @@ const DeviceCard = React.memo(function DeviceCard({ device, isAdmin, onDelete, o
         </div>
 
         {/* Device ID */}
-        <div className="bg-slate-900 rounded-lg p-3 mb-4">
-          <p className="text-slate-500 text-xs mb-1">Device ID</p>
-          <p className="text-blue-400 font-mono text-sm font-semibold">{device.id}</p>
+        <div className="bg-background rounded-lg p-3 mb-4">
+          <p className="text-muted-foreground text-xs mb-1">Device ID</p>
+          <p className="text-primary font-mono text-sm font-semibold">{device.id}</p>
         </div>
 
         {/* Location */}
-        <div className="flex items-center space-x-2 text-slate-400 mb-3">
+        <div className="flex items-center space-x-2 text-muted-foreground mb-3">
           <MapPin className="h-4 w-4" />
           <span className="text-sm">{device.location}</span>
         </div>
 
         {/* Last Update */}
-        <div className="flex items-center space-x-2 text-slate-500 mb-4">
+        <div className="flex items-center space-x-2 text-muted-foreground mb-4">
           <Clock className="h-4 w-4" />
           <span className="text-xs">{device.lastUpdate}</span>
         </div>
 
         {isAdmin && (
-          <div className="bg-slate-900 rounded-lg p-3 mb-4">
-            <p className="text-slate-500 text-xs mb-1">Được phân quyền cho</p>
+          <div className="bg-background rounded-lg p-3 mb-4">
+            <p className="text-muted-foreground text-xs mb-1">Được phân quyền cho</p>
             {Array.isArray(device.managers) && device.managers.length > 0 ? (
               <div className="space-y-1 max-h-20 overflow-y-auto">
                 {device.managers.slice(0, 3).map((m) => (
-                  <p key={m.user_id} className="text-slate-200 text-xs">
-                    {m.fullname} <span className="text-slate-500">@{m.username}</span>
+                  <p key={m.user_id} className="text-foreground/90 text-xs">
+                    {m.fullname} <span className="text-muted-foreground">@{m.username}</span>
                   </p>
                 ))}
                 {device.managers.length > 3 && (
-                  <p className="text-slate-500 text-[11px]">
+                  <p className="text-muted-foreground text-[11px]">
                     +{device.managers.length - 3} user khác
                   </p>
                 )}
               </div>
             ) : (
-              <p className="text-slate-500 text-xs">Chưa phân quyền cho user nào</p>
+              <p className="text-muted-foreground text-xs">Chưa phân quyền cho user nào</p>
             )}
           </div>
         )}
 
         {/* Current Value */}
-        <div className="bg-slate-900 rounded-lg p-3 mb-4">
-          <p className="text-slate-500 text-xs mb-1">Current Reading</p>
+        <div className="bg-background rounded-lg p-3 mb-4">
+          <p className="text-muted-foreground text-xs mb-1">Current Reading</p>
           {device.type === 'GPS' ? (
-            <div className="text-white">
-              <p className="font-bold text-sm mb-1">X: <span className="text-blue-400">{Number.isFinite(Number(device.x)) ? Number(device.x).toFixed(2) : device.x}</span></p>
-              <p className="font-bold text-sm">Y: <span className="text-blue-400">{Number.isFinite(Number(device.y)) ? Number(device.y).toFixed(2) : device.y}</span></p>
+            <div className="text-foreground">
+              <p className="font-bold text-sm mb-1">X: <span className="text-primary">{Number.isFinite(Number(device.x)) ? Number(device.x).toFixed(2) : device.x}</span></p>
+              <p className="font-bold text-sm">Y: <span className="text-primary">{Number.isFinite(Number(device.y)) ? Number(device.y).toFixed(2) : device.y}</span></p>
             </div>
           ) : (
-            <p className="text-white font-bold text-2xl">
-              {device.value} <span className="text-slate-400 text-base">{device.unit}</span>
+            <p className="text-foreground font-bold text-2xl">
+              {device.value} <span className="text-muted-foreground text-base">{device.unit}</span>
             </p>
           )}
         </div>
       </div>
 
-      {/* Card Footer */}
-      <div className="px-6 py-4 bg-slate-900 border-t border-slate-700 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${
-            device.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-          }`}></div>
-          <span className={`text-sm font-medium ${
-            device.status === 'online' ? 'text-green-500' : 'text-red-500'
-          }`}>
-            {device.status.toUpperCase()}
-          </span>
-        </div>
-
-        {/* Live Status Toggle */}
-        <Button
-          onClick={() => onToggle(device.id)}
-          variant={device.status === 'online' ? 'destructive' : 'default'}
-          className={device.status === 'online' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}
-        >
-          {device.status === 'online' ? 'Turn Off' : 'Turn On'}
-        </Button>
+      {/* Card Footer — chỉ hiển thị trạng thái (read-only).
+          FE chưa có khả năng điều khiển bật/tắt thiết bị thật nên không render nút toggle. */}
+      <div className="px-6 py-4 bg-background border-t border-border flex items-center">
+        <StatusBadge status={device.status} />
       </div>
     </div>
   );
 });
 
 const Devices = () => {
-  const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -286,20 +278,6 @@ const Devices = () => {
     };
   }, [isAdmin]);
 
-  // useCallback + functional setState => tham chiếu ổn định, cho phép React.memo
-  // trên DeviceCard tránh re-render thừa.
-  const handleToggleStatus = useCallback((deviceId) => {
-    setDevices((prev) => prev.map(device =>
-      String(device.id ?? device.device_id) === String(deviceId)
-        ? { ...device, status: device.status === 'online' ? 'offline' : 'online' }
-        : device
-    ));
-  }, []);
-
-  const handleDeviceClick = (deviceId) => {
-    navigate(`/devices/${deviceId}`);
-  };
-
   const handleAddDevice = (newDevice) => {
     // Optimistically append created device; next page refresh will sync from API.
     setDevices((prev) => [...prev, newDevice]);
@@ -350,7 +328,10 @@ const Devices = () => {
       const coordY = d.y ?? d.latitude ?? d.lat ?? null;
       const xVal = coordX == null ? '—' : coordX;
       const yVal = coordY == null ? '—' : coordY;
-      return { ...d, id: String(id), name, type, location, lastUpdate, value, unit, x: xVal, y: yVal };
+      // Chuẩn hoá status (active/deactive từ API hoặc online/offline từ mock) → 'online'|'offline'
+      // để DeviceCard so sánh nhất quán.
+      const status = toUiStatus(d.status);
+      return { ...d, id: String(id), name, type, location, lastUpdate, value, unit, x: xVal, y: yVal, status };
     });
   }, [devices]);
 
@@ -372,19 +353,15 @@ const Devices = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Devices</h1>
-          <p className="text-slate-400">Manage and monitor your IoT devices</p>
-        </div>
-        
-        <div className="flex items-center space-x-3">
-          <span className="text-slate-400">
-            Total: <span className="text-white font-bold">{normalizedDevices.length}</span>
+      <PageHeader
+        title="Devices"
+        description="Manage and monitor your IoT devices"
+        actions={
+          <span className="text-muted-foreground">
+            Total: <span className="text-foreground font-bold">{normalizedDevices.length}</span>
           </span>
-        </div>
-      </div>
+        }
+      />
 
       {loadError && (
         <div className="p-4 rounded-lg bg-red-900/30 border border-red-700 text-red-200 text-sm">{loadError}</div>
@@ -393,14 +370,14 @@ const Devices = () => {
       {/* Search Bar */}
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-          <Search className="h-5 w-5 text-slate-400" />
+          <Search className="h-5 w-5 text-muted-foreground" />
         </div>
         <input
           type="text"
           placeholder="Search devices by name, ID, or location..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-11 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+          className="w-full pl-11 pr-4 py-3 bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
         />
       </div>
 
@@ -414,7 +391,6 @@ const Devices = () => {
                 device={device}
                 isAdmin={admin}
                 onDelete={handleDeleteRequest}
-                onToggle={handleToggleStatus}
               />
             ))
         }
@@ -423,9 +399,9 @@ const Devices = () => {
       {/* No Results */}
       {filteredDevices.length === 0 && (
         <div className="text-center py-12">
-          <Cpu className="h-16 w-16 text-slate-600 mx-auto mb-4" />
-          <p className="text-slate-400 text-lg">No devices found</p>
-          <p className="text-slate-500 text-sm">
+          <Cpu className="h-16 w-16 text-muted-foreground/60 mx-auto mb-4" />
+          <p className="text-muted-foreground text-lg">No devices found</p>
+          <p className="text-muted-foreground text-sm">
             {loading
               ? 'Đang tải...'
               : isAdmin()
@@ -439,7 +415,7 @@ const Devices = () => {
       {isAdmin() && (
         <button
           onClick={() => setShowAddModal(true)}
-          className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl shadow-blue-500/50 hover:shadow-blue-500/70 transition-all duration-200 flex items-center justify-center group hover:scale-110 z-40"
+          className="fixed bottom-8 right-8 w-14 h-14 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full shadow-2xl shadow-blue-500/50 hover:shadow-blue-500/70 transition-all duration-200 flex items-center justify-center group hover:scale-110 z-40"
           title="Add New Device"
         >
           <Plus className="h-7 w-7" />
@@ -454,52 +430,70 @@ const Devices = () => {
         />
       )}
 
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-          <div className="bg-slate-800 border border-red-900/50 rounded-xl max-w-md w-full shadow-2xl p-6">
-            <h3 className="text-lg font-bold text-white mb-2">Xác nhận xóa thiết bị</h3>
-            <p className="text-slate-300 text-sm mb-4">
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          // Đóng (ESC / click overlay / Cancel) → reset state. Không cho đóng khi đang xoá.
+          if (!open && !deleting) {
+            setDeleteTarget(null);
+            setDeleteConfirm('');
+            setDeleteError('');
+          }
+        }}
+      >
+        <AlertDialogContent className="border-red-900/50">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa thiết bị</AlertDialogTitle>
+            <AlertDialogDescription>
               Thao tác này xóa thiết bị và các bản ghi phân quyền liên quan. Không thể hoàn tác.
-            </p>
-            <ul className="text-slate-200 text-sm mb-4 space-y-1 list-disc list-inside">
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {deleteTarget && (
+            <ul className="text-foreground/90 text-sm space-y-1 list-disc list-inside">
               <li>
-                <span className="text-slate-400">Tên:</span>{' '}
+                <span className="text-muted-foreground">Tên:</span>{' '}
                 {deleteTarget.name ?? deleteTarget.devicename ?? '—'}
               </li>
               <li>
-                <span className="text-slate-400">Device ID:</span>{' '}
+                <span className="text-muted-foreground">Device ID:</span>{' '}
                 {deleteTarget.device_id ?? deleteTarget.id}
               </li>
             </ul>
-            <p className="text-amber-200/90 text-xs mb-3">
-              Nhập <strong className="text-white">OK</strong> (chữ in hoa) để xác nhận.
+          )}
+
+          <div>
+            <p className="text-amber-200/90 text-xs mb-2">
+              Nhập <strong className="text-foreground">OK</strong> (chữ in hoa) để xác nhận.
             </p>
             <input
               type="text"
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
               placeholder="OK"
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white mb-3 font-mono"
+              aria-label="Nhập OK để xác nhận xóa"
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground font-mono"
             />
-            {deleteError && <p className="text-red-400 text-sm mb-3">{deleteError}</p>}
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteTarget(null)}
-              >
-                Hủy
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDeleteDevice}
-                disabled={deleting}
-              >
-                {deleting ? 'Đang xóa...' : 'Xóa thiết bị'}
-              </Button>
-            </div>
+            {deleteError && <p className="text-red-400 text-sm mt-2">{deleteError}</p>}
           </div>
-        </div>
-      )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={(e) => {
+                // Ngăn AlertDialogAction tự đóng dialog: tự xử lý đóng trong handleDeleteDevice
+                // (chỉ đóng khi xoá thành công; nếu lỗi/confirm sai phải giữ dialog để hiện lỗi).
+                e.preventDefault();
+                handleDeleteDevice();
+              }}
+            >
+              {deleting ? 'Đang xóa...' : 'Xóa thiết bị'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

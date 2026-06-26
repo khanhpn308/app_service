@@ -107,20 +107,20 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full border border-slate-700 max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-2xl shadow-2xl max-w-md w-full border border-border max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-700">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-blue-500/20 rounded-lg">
-              <Cpu className="h-6 w-6 text-blue-500" />
+              <Cpu className="h-6 w-6 text-primary" />
             </div>
-            <h2 className="text-xl font-bold text-white">Add New Device</h2>
+            <h2 className="text-xl font-bold text-foreground">Add New Device</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-700 rounded-lg transition-colors duration-200"
+            className="p-2 hover:bg-card rounded-lg transition-colors duration-200"
           >
-            <X className="h-5 w-5 text-slate-400" />
+            <X className="h-5 w-5 text-muted-foreground" />
           </button>
         </div>
 
@@ -133,7 +133,7 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
           )}
           {/* Device Name */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-foreground/90 mb-2">
               Device Name *
             </label>
             <input
@@ -141,9 +141,9 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
               name="name"
               value={formData.name}
               onChange={handleChange}
-              className={`w-full px-4 py-3 bg-slate-700 border ${
-                errors.name ? 'border-red-500' : 'border-slate-600'
-              } rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
+              className={`w-full px-4 py-3 bg-card border ${
+                errors.name ? 'border-red-500' : 'border-border'
+              } rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200`}
               placeholder="e.g., Temperature Sensor A"
             />
             {errors.name && (
@@ -156,14 +156,14 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
 
           {/* Device Type */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-foreground/90 mb-2">
               Device Type *
             </label>
             <select
               name="type"
               value={formData.type}
               onChange={handleChange}
-              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
             >
               {deviceTypes.map((type) => (
                 <option key={type.value} value={type.value}>{type.label}</option>
@@ -173,7 +173,7 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
 
           {/* Location */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-foreground/90 mb-2">
               Location *
             </label>
             <input
@@ -181,9 +181,9 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
               name="location"
               value={formData.location}
               onChange={handleChange}
-              className={`w-full px-4 py-3 bg-slate-700 border ${
-                errors.location ? 'border-red-500' : 'border-slate-600'
-              } rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
+              className={`w-full px-4 py-3 bg-card border ${
+                errors.location ? 'border-red-500' : 'border-border'
+              } rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200`}
               placeholder="e.g., Building A - Floor 1"
             />
             {errors.location && (
@@ -196,7 +196,7 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
 
           {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-foreground/90 mb-2">
               Device Password *
             </label>
             <input
@@ -204,9 +204,9 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
               name="password"
               value={formData.password}
               onChange={handleChange}
-              className={`w-full px-4 py-3 bg-slate-700 border ${
-                errors.password ? 'border-red-500' : 'border-slate-600'
-              } rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
+              className={`w-full px-4 py-3 bg-card border ${
+                errors.password ? 'border-red-500' : 'border-border'
+              } rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200`}
               placeholder="Enter device password"
             />
             {errors.password && (
@@ -218,7 +218,7 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-foreground/90 mb-2">
               MQTT Topic Nhan (optional)
             </label>
             <input
@@ -226,13 +226,13 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
               name="topic"
               value={formData.topic}
               onChange={handleChange}
-              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
               placeholder="devices/101/telemetry"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-foreground/90 mb-2">
               MQTT Topic Gui (optional)
             </label>
             <input
@@ -240,7 +240,7 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
               name="publishTopic"
               value={formData.publishTopic}
               onChange={handleChange}
-              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
               placeholder="devices/101/downlink"
             />
           </div>
@@ -250,14 +250,14 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors duration-200"
+              className="flex-1 px-4 py-3 bg-card hover:bg-muted text-foreground font-semibold rounded-lg transition-colors duration-200"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg shadow-blue-500/50 disabled:opacity-60"
+              className="flex-1 px-4 py-3 bg-primary hover:bg-primary/90 text-foreground font-semibold rounded-lg transition-all duration-200 shadow-lg shadow-blue-500/50 disabled:opacity-60"
             >
               {submitting ? 'Adding...' : 'Add Device'}
             </button>

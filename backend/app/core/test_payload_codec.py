@@ -77,12 +77,14 @@ def decode_coordinates_data_proto(payload: bytes) -> dict[str, Any]:
             uint32 type = 2;
             float x = 3;
             float y = 4;
-            uint64 timestamp_ms = 5;
+            string location = 5;
+            uint64 timestamp_ms = 6;
         }
 
     Current backend support:
-        - type = 1: GPS payload with x/y coordinates.
-        - Other types are preserved as parsed fields so new frames can be added later.
+        - Message này theo định nghĩa là dữ liệu toạ độ → sensor_type luôn là "gps"
+          (tương ứng mã 4 trong bộ mã thống nhất SENSOR_CODE_TO_NAME của payload_decoder).
+        - Field `type` được giữ nguyên làm sub-type/biến thể toạ độ cho mở rộng sau.
     """
     data = bytes(payload or b"")
     offset = 0
@@ -124,7 +126,18 @@ def decode_coordinates_data_proto(payload: bytes) -> dict[str, Any]:
             hit_any_known_field = True
             continue
 
-        if field_number == 5 and wire_type == 0:
+        if field_number == 5 and wire_type == 2:
+            # location: length-delimited string
+            length, offset = _read_varint(data, offset)
+            end = offset + length
+            if end > len(data):
+                raise TestPayloadDecodeError("truncated payload")
+            out["location"] = data[offset:end].decode("utf-8", errors="replace")
+            offset = end
+            hit_any_known_field = True
+            continue
+
+        if field_number == 6 and wire_type == 0:
             timestamp_ms, offset = _read_varint(data, offset)
             out["timestamp_ms"] = int(timestamp_ms)
             hit_any_known_field = True
@@ -135,8 +148,8 @@ def decode_coordinates_data_proto(payload: bytes) -> dict[str, Any]:
     if not hit_any_known_field:
         raise TestPayloadDecodeError("payload is not coordinates_data protobuf")
 
-    type_code = int(out.get("type") or 0)
-    out["sensor_type"] = "gps" if type_code == 1 else f"type_{type_code}" if type_code else "unknown"
+    # coordinates_data luôn là dữ liệu toạ độ → sensor_type = "gps" (mã 4 thống nhất).
+    out["sensor_type"] = "gps"
     if "timestamp_ms" in out:
         out["ts"] = float(int(out["timestamp_ms"])) / 1000.0
     return out

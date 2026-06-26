@@ -25,6 +25,18 @@ from app.core.test_payload_codec import decode_coordinates_data_proto, decode_te
 
 MIN_REASONABLE_EPOCH_S = 946684800  # 2000-01-01T00:00:00Z
 
+# Bộ mã loại cảm biến THỐNG NHẤT cho toàn hệ thống (server là nguồn sự thật).
+# Firmware ESP32 phải gửi đúng các mã số này. Mọi nơi cần map số <-> tên đều
+# tham chiếu bảng này để tránh 3 hệ mã rời rạc mâu thuẫn nhau như trước.
+SENSOR_CODE_TO_NAME: dict[int, str] = {
+    0: "unknown",
+    1: "temperature",
+    2: "vibration",
+    3: "power",
+    4: "gps",
+}
+SENSOR_NAME_TO_CODE: dict[str, int] = {v: k for k, v in SENSOR_CODE_TO_NAME.items()}
+
 
 def _is_reasonable_epoch_seconds(v: float) -> bool:
     """Kiểm tra ts có hợp lý để coi là Unix epoch seconds hay không."""
@@ -113,13 +125,15 @@ def _first_non_none(*values: Any) -> Any:
 
 
 def _normalize_sensor_type(raw_sensor_type: Any) -> str:
-    """Chuẩn hóa tên loại cảm biến về bộ chuẩn: temperature, vibration, power."""
+    """Chuẩn hóa tên loại cảm biến về bộ chuẩn: temperature, vibration, power, gps.
+
+    Mã số tuân theo ``SENSOR_CODE_TO_NAME`` (1=temperature, 2=vibration, 3=power, 4=gps).
+    """
     if raw_sensor_type is None:
         return ""
     if isinstance(raw_sensor_type, (int, float)):
-        if int(raw_sensor_type) == 1:
-            return "gps"
-        return f"type_{int(raw_sensor_type)}"
+        code = int(raw_sensor_type)
+        return SENSOR_CODE_TO_NAME.get(code, f"type_{code}")
     s = str(raw_sensor_type).strip().lower()
     if not s:
         return ""
@@ -148,14 +162,9 @@ def _sensor_name_from_code(sensor_code: int) -> str:
 
     Công dụng:
         - Đổi mã số loại cảm biến trong payload nhị phân mẫu thành tên chuẩn.
+        - Dùng bộ mã thống nhất ``SENSOR_CODE_TO_NAME`` (1=temp, 2=vib, 3=power, 4=gps).
     """
-    if sensor_code == 1:
-        return "temperature"
-    if sensor_code == 2:
-        return "vibration"
-    if sensor_code == 3:
-        return "power"
-    return "unknown"
+    return SENSOR_CODE_TO_NAME.get(sensor_code, "unknown")
 
 
 def _read_varint(data: bytes, pos: int) -> tuple[int, int]:
@@ -279,13 +288,14 @@ def _decode_nanopb_template(payload: bytes) -> dict[str, Any]:
         - Khung mẫu giải mã payload nhị phân theo layout giả định để bạn chỉnh lại nhanh.
 
     Layout mẫu (little-endian):
-        - Byte 0: ``sensor_type_code`` (1=temp, 2=vibration, 3=power)
+        - Byte 0: ``sensor_type_code`` (1=temp, 2=vibration, 3=power, 4=gps)
         - Byte 1..4: ``timestamp_s`` (uint32, epoch giây)
         - Byte 5..8: ``device_id`` (uint32)
         - Byte 9..n: dữ liệu float32 theo loại cảm biến
             - Temperature: ``temperature``
             - Vibration: ``vibration``
             - Power: ``voltage``, ``current``
+            - GPS: ``x``, ``y`` (location dạng string không gửi qua khung này — dùng protobuf)
     """
     if len(payload) < 9:
         raise ValueError("payload too short for template binary layout")
@@ -318,6 +328,14 @@ def _decode_nanopb_template(payload: bytes) -> dict[str, Any]:
         voltage, current = struct.unpack_from("<ff", payload, pos)
         out["voltage"] = float(voltage)
         out["current"] = float(current)
+    elif sensor_type == "gps":
+        # Khung byte cố định chỉ tải được x/y (không có chỗ cho `location` string).
+        # GPS đầy đủ (kèm location) nên gửi bằng protobuf coordinates_data.
+        if len(payload) < pos + 8:
+            raise ValueError("gps payload missing x/y float32 values")
+        x_coord, y_coord = struct.unpack_from("<ff", payload, pos)
+        out["x"] = float(x_coord)
+        out["y"] = float(y_coord)
 
     return out
 
@@ -399,6 +417,7 @@ def decode_sensor_payload(topic: str, payload: bytes) -> dict[str, Any]:
     )
     x_coord = _first_non_none(parsed.get("x"), parsed.get("longitude"), parsed.get("lon"))
     y_coord = _first_non_none(parsed.get("y"), parsed.get("latitude"), parsed.get("lat"))
+    location = _first_non_none(parsed.get("location"), parsed.get("loc"))
     voltage = _first_non_none(
         parsed.get("voltage"),
         parsed.get("volt"),
@@ -468,6 +487,7 @@ def decode_sensor_payload(topic: str, payload: bytes) -> dict[str, Any]:
         "vibration": vibration,
         "x": x_coord,
         "y": y_coord,
+        "location": location,
         "voltage": voltage,
         "current": current,
         "payload_type": parsed.get("type"),

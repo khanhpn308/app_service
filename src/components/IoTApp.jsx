@@ -17,11 +17,11 @@ import Login from '../pages/Login';
 import ForgotPassword from '../pages/ForgotPassword';
 import Home from '../pages/Home';
 import GlobalDashboard from '../pages/GlobalDashboard';
+import GPSPage from '../pages/GPSPage';
 import Devices from '../pages/Devices';
 import DeviceDetail from '../pages/DeviceDetail';
 import UserManagement from '../pages/UserManagement';
 import TopicManagement from '../pages/TopicManagement';
-import TestPage from '../pages/TestPage';
 import ChangePassword from '../pages/ChangePassword';
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute';
@@ -29,7 +29,7 @@ import AdminRoute from './AdminRoute';
 function IoTApp() {
   return (
     <AuthProvider>
-      <Router>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -39,13 +39,13 @@ function IoTApp() {
               <Route path="/" element={<Navigate to="/home" replace />} />
               <Route path="/home" element={<Home />} />
               <Route path="/dashboard" element={<GlobalDashboard />} />
+              <Route path="/dashboard/gps" element={<GPSPage />} />
               <Route path="/change-password" element={<ChangePassword />} />
               <Route path="/devices" element={<Devices />} />
               <Route path="/devices/:deviceId" element={<DeviceDetail />} />
               <Route element={<AdminRoute />}>
                 <Route path="/user-management" element={<UserManagement />} />
                 <Route path="/topic-management" element={<TopicManagement />} />
-                <Route path="/test" element={<TestPage />} />
               </Route>
             </Route>
           </Route>

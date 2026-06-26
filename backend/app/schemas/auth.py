@@ -8,7 +8,6 @@ Khác ``app.models`` (ORM — bảng DB), module này mô tả **hợp đồng A
 """
 
 from datetime import date
-from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
@@ -25,7 +24,7 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=45)
     password: str = Field(..., min_length=6, max_length=45)
     fullname: str = Field(..., min_length=1, max_length=45)
-    cccd: Decimal = Field(..., description="12-digit citizen ID")
+    cccd: str = Field(..., description="12-digit citizen ID (string, giữ số 0 đầu)")
     email: str | None = Field(default=None, max_length=45)
     phone: str | None = Field(default=None, max_length=20)
     expired_at: date = Field(..., description="Last valid day (inclusive); 0 remaining days => deactive")
@@ -33,11 +32,11 @@ class RegisterRequest(BaseModel):
 
     @field_validator("cccd")
     @classmethod
-    def cccd_digits(cls, v: Decimal) -> Decimal:
-        s = str(int(v)) if v == int(v) else format(v, "f").rstrip("0").rstrip(".")
+    def cccd_digits(cls, v: str) -> str:
+        s = str(v).strip()
         if len(s) != 12 or not s.isdigit():
             raise ValueError("CCCD must be exactly 12 digits")
-        return v
+        return s
 
     @model_validator(mode="after")
     def expired_not_in_past(self) -> "RegisterRequest":
@@ -50,7 +49,7 @@ class UserPublic(BaseModel):
     user_id: int
     username: str
     fullname: str
-    cccd: Decimal
+    cccd: str
     email: str | None
     phone: str | None
     creat_at: date
@@ -90,15 +89,15 @@ class TokenResponse(BaseModel):
 
 class RecoverPasswordRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=45)
-    cccd: Decimal
+    cccd: str
 
     @field_validator("cccd")
     @classmethod
-    def cccd_digits(cls, v: Decimal) -> Decimal:
-        s = str(int(v)) if v == int(v) else format(v, "f").rstrip("0").rstrip(".")
+    def cccd_digits(cls, v: str) -> str:
+        s = str(v).strip()
         if len(s) != 12 or not s.isdigit():
             raise ValueError("CCCD must be exactly 12 digits")
-        return v
+        return s
 
 
 class RecoverPasswordResponse(BaseModel):
@@ -120,15 +119,15 @@ class BootstrapRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=45)
     password: str = Field(..., min_length=6, max_length=45)
     fullname: str = Field(..., min_length=1, max_length=45)
-    cccd: Decimal
+    cccd: str
     email: str | None = Field(default=None, max_length=45)
     phone: str | None = Field(default=None, max_length=20)
     expired_at: date | None = Field(default=None, description="Defaults to 2099-12-31 if omitted")
 
     @field_validator("cccd")
     @classmethod
-    def cccd_digits(cls, v: Decimal) -> Decimal:
-        s = str(int(v)) if v == int(v) else format(v, "f").rstrip("0").rstrip(".")
+    def cccd_digits(cls, v: str) -> str:
+        s = str(v).strip()
         if len(s) != 12 or not s.isdigit():
             raise ValueError("CCCD must be exactly 12 digits")
-        return v
+        return s

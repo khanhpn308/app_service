@@ -35,7 +35,9 @@ services:
     ports:
       # Backend chỉ phục vụ nội bộ qua nginx (service "backend" trong docker network).
       # Bind localhost để không truy cập trực tiếp bỏ qua reverse proxy.
-      - "127.0.0.1:8000:8000"
+      # Cổng host đổi sang 8001 vì 8000 bị dải port động của Windows (WinNAT/iphlpsvc) chiếm.
+      # Cổng nội bộ container vẫn 8000 — nginx gọi backend:8000 không đổi.
+      - "127.0.0.1:${BACKEND_HTTP_PORT:-8001}:8000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
       interval: 15s

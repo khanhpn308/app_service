@@ -190,73 +190,6 @@ def ensure_device_publish_topic_column(engine: Engine) -> None:
     logger.info("db_migrate: ensure_device_publish_topic_column OK")
 
 
-def ensure_test_logs_table(engine: Engine) -> None:
-    """Create `test_logs` table if missing for latency test feature."""
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS `test_logs` (
-                  `id` BIGINT NOT NULL AUTO_INCREMENT,
-                  `protocol` VARCHAR(32) NOT NULL,
-                  `version` INT NULL,
-                                    `message_len` INT NULL,
-                  `message` TEXT NULL,
-                                    `node_id_len` INT NULL,
-                  `node_id` VARCHAR(128) NOT NULL,
-                  `device_name` VARCHAR(128) NULL,
-                                    `gateway_id_len` INT NULL,
-                  `gateway_id` VARCHAR(128) NOT NULL,
-                  `event_timestamp_ms` BIGINT NULL,
-                  `gateway_timestamp_ms` BIGINT NULL,
-                  `mark_time_ms` BIGINT NOT NULL,
-                  `delay_gateway_to_server_ms` BIGINT NULL,
-                  `rssi` INT NULL,
-                  `src_mac` VARCHAR(17) NULL,
-                  `topic` VARCHAR(255) NULL,
-                  `raw_hex` TEXT NULL,
-                  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  PRIMARY KEY (`id`),
-                  INDEX `idx_test_logs_lookup` (`gateway_id`, `node_id`, `protocol`, `created_at`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                """
-            )
-        )
-        for col_name, ddl in (
-            ("message_len", "ALTER TABLE `test_logs` ADD COLUMN `message_len` INT NULL AFTER `version`"),
-            ("node_id_len", "ALTER TABLE `test_logs` ADD COLUMN `node_id_len` INT NULL AFTER `message`"),
-            ("device_name", "ALTER TABLE `test_logs` ADD COLUMN `device_name` VARCHAR(128) NULL AFTER `node_id`"),
-            ("gateway_id_len", "ALTER TABLE `test_logs` ADD COLUMN `gateway_id_len` INT NULL AFTER `device_name`"),
-        ):
-            r = conn.execute(
-                text(
-                    f"""
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'test_logs'
-                      AND COLUMN_NAME = '{col_name}'
-                    """
-                )
-            )
-            if (r.scalar() or 0) == 0:
-                conn.execute(text(ddl))
-
-        for col_name in ("delay_node_to_gateway_ms", "delay_node_to_server_ms"):
-            r = conn.execute(
-                text(
-                    f"""
-                    SELECT COUNT(*) FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'test_logs'
-                      AND COLUMN_NAME = '{col_name}'
-                    """
-                )
-            )
-            if (r.scalar() or 0) > 0:
-                conn.execute(text(f"ALTER TABLE `test_logs` DROP COLUMN `{col_name}`"))
-    logger.info("db_migrate: ensure_test_logs_table OK")
-
-
 def _column_exists(conn, table: str, column: str) -> bool:
     r = conn.execute(
         text(
@@ -268,10 +201,50 @@ def _column_exists(conn, table: str, column: str) -> bool:
     return (r.scalar() or 0) > 0
 
 
+def ensure_user_cccd_varchar(engine: Engine) -> None:
+    """
+    Đổi `user.cccd` từ DECIMAL/Numeric sang VARCHAR(12).
+
+    Lý do: CCCD lưu dạng số làm MẤT số 0 đứng đầu (CCCD VN thường bắt đầu bằng 0),
+    khiến validate "phải đúng 12 chữ số" thất bại. Sau khi đổi sang chuỗi, backfill
+    bằng cách pad '0' bên trái cho các bản ghi cũ bị thiếu số (do từng lưu dạng số).
+
+    Idempotent: chỉ ALTER khi kiểu hiện tại chưa phải varchar.
+    """
+    with engine.begin() as conn:
+        r = conn.execute(
+            text(
+                """
+                SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'user'
+                  AND COLUMN_NAME = 'cccd'
+                """
+            )
+        )
+        row = r.first()
+        if row is None:
+            # Cột chưa tồn tại: init schema sẽ tạo. Không làm gì.
+            return
+        data_type = (row[0] or "").lower()
+        if data_type != "varchar":
+            # Đổi kiểu sang VARCHAR(12). MySQL tự cast giá trị số hiện có sang chuỗi.
+            conn.execute(text("ALTER TABLE `user` MODIFY COLUMN `cccd` VARCHAR(12) NOT NULL"))
+        # Backfill: pad '0' bên trái cho bản ghi < 12 ký tự (đã mất số 0 khi còn là số).
+        conn.execute(
+            text(
+                "UPDATE `user` SET `cccd` = LPAD(`cccd`, 12, '0') "
+                "WHERE CHAR_LENGTH(`cccd`) < 12"
+            )
+        )
+
+
 def ensure_schema_hardening(engine: Engine) -> None:
     """Áp các thay đổi Phase 3 cho volume DB cũ (đồng bộ với 009_schema_hardening.sql).
 
-    - device.password -> VARCHAR(255); user.phone -> VARCHAR(20); user.cccd -> DECIMAL(12,0)
+    - device.password -> VARCHAR(255); user.phone -> VARCHAR(20)
+      (user.cccd -> VARCHAR(12) xử lý riêng ở ensure_user_cccd_varchar để giữ số 0 đầu)
     - status ENUM thêm 'inactive'
     - updated_at cho user/device/device_authorization
     - index device(user_device_asignment_id)
@@ -284,7 +257,6 @@ def ensure_schema_hardening(engine: Engine) -> None:
             # Kiểu cột (MODIFY idempotent — chạy lại an toàn).
             conn.execute(text("ALTER TABLE `device` MODIFY COLUMN `password` VARCHAR(255) NULL"))
             conn.execute(text("ALTER TABLE `user` MODIFY COLUMN `phone` VARCHAR(20) NULL"))
-            conn.execute(text("ALTER TABLE `user` MODIFY COLUMN `cccd` DECIMAL(12,0) NOT NULL"))
             conn.execute(text("ALTER TABLE `user` MODIFY COLUMN `status` ENUM('active','deactive','inactive') NOT NULL"))
             conn.execute(text("ALTER TABLE `device` MODIFY COLUMN `status` ENUM('active','deactive','inactive') NULL"))
 

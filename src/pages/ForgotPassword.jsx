@@ -45,19 +45,19 @@ const ForgotPassword = () => {
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
               <div className="bg-green-600 p-3 rounded-2xl shadow-lg shadow-green-500/50">
-                <CheckCircle className="h-12 w-12 text-white" />
+                <CheckCircle className="h-12 w-12 text-foreground" />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">Xác thực thành công</h1>
-            <p className="text-slate-400 text-sm text-left mb-4">{result.message}</p>
-            <div className="bg-slate-800 rounded-xl p-4 border border-slate-600 text-left">
-              <p className="text-slate-400 text-xs mb-1">Mật khẩu tạm thời mới (đăng nhập rồi đổi mật khẩu):</p>
+            <h1 className="text-2xl font-bold text-foreground mb-2">Xác thực thành công</h1>
+            <p className="text-muted-foreground text-sm text-left mb-4">{result.message}</p>
+            <div className="bg-card rounded-xl p-4 border border-border text-left">
+              <p className="text-muted-foreground text-xs mb-1">Mật khẩu tạm thời mới (đăng nhập rồi đổi mật khẩu):</p>
               <p className="text-green-400 font-mono text-lg font-bold break-all">{result.temporary_password}</p>
             </div>
           </div>
           <Link
             to="/login"
-            className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg text-center"
+            className="block w-full bg-primary hover:bg-primary/90 text-foreground font-semibold py-3 rounded-lg text-center"
           >
             Về đăng nhập
           </Link>
@@ -71,29 +71,29 @@ const ForgotPassword = () => {
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="bg-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-500/50">
-              <Cpu className="h-12 w-12 text-white" />
+            <div className="bg-primary p-3 rounded-2xl shadow-lg shadow-blue-500/50">
+              <Cpu className="h-12 w-12 text-foreground" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Lấy lại mật khẩu</h1>
-          <p className="text-slate-400">Nhập đúng tên đăng nhập và CCCD</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Lấy lại mật khẩu</h1>
+          <p className="text-muted-foreground">Nhập đúng tên đăng nhập và CCCD</p>
         </div>
 
-        <div className="bg-slate-800 rounded-2xl shadow-xl p-8 border border-slate-700">
+        <div className="bg-card rounded-2xl shadow-xl p-8 border border-border">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Tên đăng nhập</label>
+              <label className="block text-sm font-medium text-foreground/90 mb-2">Tên đăng nhập</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <User className="h-5 w-5 text-slate-400" />
+                  <User className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-3 bg-slate-700 border ${
-                    errors.username ? 'border-red-500' : 'border-slate-600'
-                  } rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  className={`w-full pl-10 pr-4 py-3 bg-card border ${
+                    errors.username ? 'border-red-500' : 'border-border'
+                  } rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring`}
                   placeholder="username"
                 />
               </div>
@@ -106,19 +106,19 @@ const ForgotPassword = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">CCCD (12 số)</label>
+              <label className="block text-sm font-medium text-foreground/90 mb-2">CCCD (12 số)</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Hash className="h-5 w-5 text-slate-400" />
+                  <Hash className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <input
                   type="text"
                   inputMode="numeric"
                   value={cccd}
                   onChange={(e) => setCccd(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                  className={`w-full pl-10 pr-4 py-3 bg-slate-700 border ${
-                    errors.cccd ? 'border-red-500' : 'border-slate-600'
-                  } rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                  className={`w-full pl-10 pr-4 py-3 bg-card border ${
+                    errors.cccd ? 'border-red-500' : 'border-border'
+                  } rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring`}
                   placeholder="012345678901"
                 />
               </div>
@@ -136,14 +136,14 @@ const ForgotPassword = () => {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-all duration-200"
+              className="w-full bg-primary hover:bg-primary/90 text-foreground font-semibold py-3 rounded-lg transition-all duration-200"
             >
               Xác nhận
             </button>
           </form>
 
           <div className="mt-6 text-center">
-            <Link to="/login" className="text-blue-400 hover:text-blue-300 font-medium">
+            <Link to="/login" className="text-primary hover:text-primary font-medium">
               ← Về đăng nhập
             </Link>
           </div>

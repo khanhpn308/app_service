@@ -50,32 +50,32 @@ const Login = () => {
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="bg-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-500/50">
-              <Cpu className="h-12 w-12 text-white" />
+            <div className="bg-primary p-3 rounded-2xl shadow-lg shadow-blue-500/50">
+              <Cpu className="h-12 w-12 text-foreground" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">IoT Management System</h1>
-          <p className="text-slate-400">Đăng nhập để sử dụng hệ thống</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">IoT Management System</h1>
+          <p className="text-muted-foreground">Đăng nhập để sử dụng hệ thống</p>
         </div>
 
-        <div className="bg-slate-800 rounded-2xl shadow-xl p-8 border border-slate-700">
+        <div className="bg-card rounded-2xl shadow-xl p-8 border border-border">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-foreground/90 mb-2">
                 Tên đăng nhập
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <User className="h-5 w-5 text-slate-400" />
+                  <User className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <input
                   type="text"
                   autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-3 bg-slate-700 border ${
-                    errors.username ? 'border-red-500' : 'border-slate-600'
-                  } rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
+                  className={`w-full pl-10 pr-4 py-3 bg-card border ${
+                    errors.username ? 'border-red-500' : 'border-border'
+                  } rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200`}
                   placeholder="username"
                 />
               </div>
@@ -88,21 +88,21 @@ const Login = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-foreground/90 mb-2">
                 Mật khẩu
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-slate-400" />
+                  <Lock className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <input
                   type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-3 bg-slate-700 border ${
-                    errors.password ? 'border-red-500' : 'border-slate-600'
-                  } rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
+                  className={`w-full pl-10 pr-4 py-3 bg-card border ${
+                    errors.password ? 'border-red-500' : 'border-border'
+                  } rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200`}
                   placeholder="••••••••"
                 />
               </div>
@@ -117,7 +117,7 @@ const Login = () => {
             <div className="flex justify-end">
               <Link
                 to="/forgot-password"
-                className="text-sm text-blue-400 hover:text-blue-300 transition-colors duration-200"
+                className="text-sm text-primary hover:text-primary transition-colors duration-200"
               >
                 Quên mật khẩu?
               </Link>
@@ -131,7 +131,7 @@ const Login = () => {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-all duration-200 shadow-lg shadow-blue-500/50 hover:shadow-blue-500/70"
+              className="w-full bg-primary hover:bg-primary/90 text-foreground font-semibold py-3 rounded-lg transition-all duration-200 shadow-lg shadow-blue-500/50 hover:shadow-blue-500/70"
             >
               Đăng nhập
             </button>

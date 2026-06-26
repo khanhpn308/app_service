@@ -19,7 +19,6 @@ Data flow:
     3. Handler trong main.py gọi:
        - influx.write_sensor_point() → InfluxDB time-series storage
        - realtime_hub.publish_from_thread() → queue async broadcast
-       - test_service.process_decoded_uplink() → test log (nếu test mode bật)
     4. RealtimeHub worker async broadcast tới:
        - Global clients (/ws/global)
        - Device-specific clients (/ws/devices/{device_id})
@@ -45,10 +44,6 @@ def _get_realtime_hub(websocket: WebSocket) -> RealtimeHub | None:
     app = websocket.app
     return getattr(app.state, "realtime_hub", None)
 
-
-def _get_test_service(websocket: WebSocket):
-    app = websocket.app
-    return getattr(app.state, "test_service", None)
 
 @router.websocket("/global")
 async def ws_global(websocket: WebSocket) -> None:
@@ -139,7 +134,6 @@ async def ws_device(websocket: WebSocket, device_id: str) -> None:
         return
     if await authenticate_ws_user(websocket) is None:
         return  # authenticate_ws_user đã close(1008)
-    test_service = _get_test_service(websocket)
     await hub.connect_device(websocket, device_id)
     try:
         while True:
@@ -166,15 +160,6 @@ async def ws_device(websocket: WebSocket, device_id: str) -> None:
                     decoded_payload.setdefault("device_id", str(device_id))
                     decoded_payload.setdefault("topic", f"ws/{device_id}")
                     hub.publish_from_thread(decoded_payload)
-                    if test_service is not None:
-                        try:
-                            test_service.process_websocket_uplink(
-                                decoded=decoded_payload,
-                                device_id=device_id,
-                                raw_hex=raw_bytes.hex(),
-                            )
-                        except Exception:
-                            pass
                     continue
 
                 if not str(raw_text).strip():
@@ -188,15 +173,6 @@ async def ws_device(websocket: WebSocket, device_id: str) -> None:
                 payload.setdefault("device_id", str(device_id))
                 payload.setdefault("topic", f"ws/{device_id}")
                 hub.publish_from_thread(payload)
-                if test_service is not None:
-                    try:
-                        test_service.process_websocket_uplink(
-                            decoded=payload,
-                            device_id=device_id,
-                            raw_hex="",
-                        )
-                    except Exception:
-                        pass
             except RuntimeError as exc:
                 if "disconnect message" in str(exc):
                     break
@@ -262,7 +238,6 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
     if await authenticate_ws_device(websocket, device_id) is None:
         return  # authenticate_ws_device đã close(1008)
 
-    test_service = _get_test_service(websocket)
     await hub.connect_esp32(websocket, device_id)
     try:
         await websocket.send_json({"ok": True, "device_id": device_id, "message": "connected"})
@@ -300,15 +275,6 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
                         decoded_payload.setdefault("topic", f"ws/{device_id}")
                         # Push ESP32 uplink into realtime pipeline for /ws/global and /ws/devices/{id}.
                         hub.publish_from_thread(decoded_payload)
-                        if test_service is not None:
-                            try:
-                                test_service.process_websocket_uplink(
-                                    decoded=decoded_payload,
-                                    device_id=device_id,
-                                    raw_hex=raw_bytes.hex(),
-                                )
-                            except Exception:
-                                pass
                     await websocket.send_json(
                         {
                             "ok": True,
@@ -332,15 +298,6 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
                 payload.setdefault("topic", f"ws/{device_id}")
                 # Push JSON uplink into realtime pipeline for dashboards.
                 hub.publish_from_thread(payload)
-                if test_service is not None:
-                    try:
-                        test_service.process_websocket_uplink(
-                            decoded=payload,
-                            device_id=device_id,
-                            raw_hex="",
-                        )
-                    except Exception:
-                        pass
 
                 await websocket.send_json({"ok": True, "device_id": device_id, "received": payload})
             except WebSocketDisconnect:

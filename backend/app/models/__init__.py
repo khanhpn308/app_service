@@ -8,7 +8,6 @@ Package ``app.models``: đăng ký các class ORM cho SQLAlchemy.
 from app.models.base import Base
 from app.models.device import Device
 from app.models.device_authorization import DeviceAuthorization
-from app.models.test_log import TestLog
 from app.models.user import User
 
-__all__ = ["Base", "User", "Device", "DeviceAuthorization", "TestLog"]
+__all__ = ["Base", "User", "Device", "DeviceAuthorization"]

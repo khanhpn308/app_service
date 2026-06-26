@@ -364,8 +364,8 @@ const DeviceDetail = () => {
   if (loadingDevice) {
     return (
       <div className="text-center py-12">
-        <Cpu className="h-16 w-16 text-slate-600 mx-auto mb-4 animate-pulse" />
-        <p className="text-slate-400 text-lg">Loading device…</p>
+        <Cpu className="h-16 w-16 text-muted-foreground mx-auto mb-4 animate-pulse" />
+        <p className="text-muted-foreground text-lg">Loading device…</p>
       </div>
     );
   }
@@ -373,11 +373,11 @@ const DeviceDetail = () => {
   if (!device) {
     return (
       <div className="text-center py-12">
-        <Cpu className="h-16 w-16 text-slate-600 mx-auto mb-4" />
-        <p className="text-slate-400 text-lg">Device not found</p>
+        <Cpu className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+        <p className="text-muted-foreground text-lg">Device not found</p>
         <button
           onClick={() => navigate('/devices')}
-          className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200"
+          className="mt-4 px-6 py-2 bg-primary hover:bg-primary/90 text-foreground rounded-lg transition-colors duration-200"
         >
           Back to Devices
         </button>
@@ -397,13 +397,13 @@ const DeviceDetail = () => {
       <div className="flex items-center space-x-4">
         <button
           onClick={() => navigate('/devices')}
-          className="p-2 hover:bg-slate-800 rounded-lg transition-colors duration-200"
+          className="p-2 hover:bg-card rounded-lg transition-colors duration-200"
         >
-          <ArrowLeft className="h-6 w-6 text-slate-400" />
+          <ArrowLeft className="h-6 w-6 text-muted-foreground" />
         </button>
         <div className="flex-1">
-          <h1 className="text-3xl font-bold text-white mb-2">{device.name}</h1>
-          <div className="flex items-center space-x-4 text-slate-400">
+          <h1 className="text-3xl font-bold text-foreground mb-2">{device.name}</h1>
+          <div className="flex items-center space-x-4 text-muted-foreground">
             <span className="flex items-center space-x-2">
               <MapPin className="h-4 w-4" />
               <span>{device.location}</span>
@@ -431,27 +431,27 @@ const DeviceDetail = () => {
 
       {/* Device Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+        <div className="bg-card rounded-xl p-6 border border-border">
           <div className="flex items-center space-x-3 mb-4">
             <div className="p-2 bg-blue-500/20 rounded-lg">
-              <Cpu className="h-5 w-5 text-blue-500" />
+              <Cpu className="h-5 w-5 text-primary" />
             </div>
-            <p className="text-slate-400 text-sm font-medium">Device ID</p>
+            <p className="text-muted-foreground text-sm font-medium">Device ID</p>
           </div>
-          <p className="text-blue-400 font-mono text-lg font-bold">{device.id}</p>
+          <p className="text-primary font-mono text-lg font-bold">{device.id}</p>
         </div>
 
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+        <div className="bg-card rounded-xl p-6 border border-border">
           <div className="flex items-center space-x-3 mb-4">
             <div className="p-2 bg-purple-500/20 rounded-lg">
               <Activity className="h-5 w-5 text-purple-500" />
             </div>
-            <p className="text-slate-400 text-sm font-medium">Device Type</p>
+            <p className="text-muted-foreground text-sm font-medium">Device Type</p>
           </div>
-          <p className="text-white text-lg font-bold">{device.type}</p>
+          <p className="text-foreground text-lg font-bold">{device.type}</p>
         </div>
 
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+        <div className="bg-card rounded-xl p-6 border border-border">
           <div className="flex items-center space-x-3 mb-4">
             <div className={`p-2 rounded-lg ${
               device.status === 'online' ? 'bg-green-500/20' : 'bg-red-500/20'
@@ -460,10 +460,10 @@ const DeviceDetail = () => {
                 device.status === 'online' ? 'text-green-500' : 'text-red-500'
               }`} />
             </div>
-            <p className="text-slate-400 text-sm font-medium">Current Reading</p>
+            <p className="text-muted-foreground text-sm font-medium">Current Reading</p>
           </div>
           {device.type === 'GPS' ? (
-            <div className="text-white">
+            <div className="text-foreground">
               {(() => {
                 const latest = realtimeSeries[realtimeSeries.length - 1];
                 const rawX = latest?.x ?? apiDetail?.x ?? device.x ?? '—';
@@ -472,30 +472,30 @@ const DeviceDetail = () => {
                 const displayY = Number.isFinite(Number(rawY)) ? Number(rawY).toFixed(2) : rawY;
                 return (
                   <>
-                    <p className="text-sm mb-2">X: <span className="text-blue-400 font-bold text-lg">{displayX}</span></p>
-                    <p className="text-sm">Y: <span className="text-blue-400 font-bold text-lg">{displayY}</span></p>
+                    <p className="text-sm mb-2">X: <span className="text-primary font-bold text-lg">{displayX}</span></p>
+                    <p className="text-sm">Y: <span className="text-primary font-bold text-lg">{displayY}</span></p>
                   </>
                 );
               })()}
             </div>
           ) : (
-            <p className="text-white text-2xl font-bold">
-              {device.value} <span className="text-slate-400 text-base">{device.unit}</span>
+            <p className="text-foreground text-2xl font-bold">
+              {device.value} <span className="text-muted-foreground text-base">{device.unit}</span>
             </p>
           )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
         {/* Tab Headers */}
-        <div className="flex border-b border-slate-700">
+        <div className="flex border-b border-border">
           <button
             onClick={() => setActiveTab('account')}
             className={`flex-1 px-6 py-4 font-semibold transition-colors duration-200 ${
               activeTab === 'account'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                ? 'bg-primary text-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             }`}
           >
             Account
@@ -504,8 +504,8 @@ const DeviceDetail = () => {
             onClick={() => setActiveTab('history')}
             className={`flex-1 px-6 py-4 font-semibold transition-colors duration-200 ${
               activeTab === 'history'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                ? 'bg-primary text-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             }`}
           >
             History
@@ -514,8 +514,8 @@ const DeviceDetail = () => {
             onClick={() => setActiveTab('dashboard')}
             className={`flex-1 px-6 py-4 font-semibold transition-colors duration-200 ${
               activeTab === 'dashboard'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                ? 'bg-primary text-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             }`}
           >
             Dashboard
@@ -527,43 +527,43 @@ const DeviceDetail = () => {
           {activeTab === 'account' && (
             <div className="space-y-6">
               {/* Device ID Section */}
-              <div className="bg-slate-900 rounded-lg p-6 border border-slate-700">
+              <div className="bg-background rounded-lg p-6 border border-border">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-2">
-                    <Cpu className="h-5 w-5 text-blue-500" />
-                    <h3 className="text-lg font-semibold text-white">Device Credentials</h3>
+                    <Cpu className="h-5 w-5 text-primary" />
+                    <h3 className="text-lg font-semibold text-foreground">Device Credentials</h3>
                   </div>
                 </div>
                 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-slate-400 text-sm mb-2">Device ID</label>
-                    <div className="bg-slate-800 border border-slate-600 rounded-lg px-4 py-3">
-                      <p className="text-blue-400 font-mono font-semibold">{device.id}</p>
+                    <label className="block text-muted-foreground text-sm mb-2">Device ID</label>
+                    <div className="bg-card border border-border rounded-lg px-4 py-3">
+                      <p className="text-primary font-mono font-semibold">{device.id}</p>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-slate-400 text-sm mb-2">Password</label>
+                    <label className="block text-muted-foreground text-sm mb-2">Password</label>
                     <div className="flex space-x-2">
-                      <div className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 flex items-center justify-between">
-                        <p className="text-white font-mono">
+                      <div className="flex-1 bg-card border border-border rounded-lg px-4 py-3 flex items-center justify-between">
+                        <p className="text-foreground font-mono">
                           {showPassword ? device.password : maskPassword(device.password)}
                         </p>
                         <button
                           onClick={() => setShowPassword(!showPassword)}
-                          className="ml-2 p-1 hover:bg-slate-700 rounded transition-colors duration-200"
+                          className="ml-2 p-1 hover:bg-muted rounded transition-colors duration-200"
                         >
                           {showPassword ? (
-                            <EyeOff className="h-4 w-4 text-slate-400" />
+                            <EyeOff className="h-4 w-4 text-muted-foreground" />
                           ) : (
-                            <Eye className="h-4 w-4 text-slate-400" />
+                            <Eye className="h-4 w-4 text-muted-foreground" />
                           )}
                         </button>
                       </div>
                       <button
                         onClick={() => setShowPasswordModal(true)}
-                        className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200 flex items-center space-x-2"
+                        className="px-4 py-3 bg-primary hover:bg-primary/90 text-foreground rounded-lg transition-colors duration-200 flex items-center space-x-2"
                       >
                         <Edit2 className="h-4 w-4" />
                         <span>Edit</span>
@@ -574,24 +574,24 @@ const DeviceDetail = () => {
               </div>
 
               {/* Device Information */}
-              <div className="bg-slate-900 rounded-lg p-6 border border-slate-700">
-                <h3 className="text-lg font-semibold text-white mb-4">Device Information</h3>
+              <div className="bg-background rounded-lg p-6 border border-border">
+                <h3 className="text-lg font-semibold text-foreground mb-4">Device Information</h3>
                 
                 <div className="space-y-3">
-                  <div className="flex justify-between py-2 border-b border-slate-700">
-                    <span className="text-slate-400">Name</span>
-                    <span className="text-white font-medium">{device.name}</span>
+                  <div className="flex justify-between py-2 border-b border-border">
+                    <span className="text-muted-foreground">Name</span>
+                    <span className="text-foreground font-medium">{device.name}</span>
                   </div>
-                  <div className="flex justify-between py-2 border-b border-slate-700">
-                    <span className="text-slate-400">Type</span>
-                    <span className="text-white font-medium">{device.type}</span>
+                  <div className="flex justify-between py-2 border-b border-border">
+                    <span className="text-muted-foreground">Type</span>
+                    <span className="text-foreground font-medium">{device.type}</span>
                   </div>
-                  <div className="flex justify-between py-2 border-b border-slate-700">
-                    <span className="text-slate-400">Location</span>
-                    <span className="text-white font-medium">{device.location}</span>
+                  <div className="flex justify-between py-2 border-b border-border">
+                    <span className="text-muted-foreground">Location</span>
+                    <span className="text-foreground font-medium">{device.location}</span>
                   </div>
                   <div className="flex justify-between py-2">
-                    <span className="text-slate-400">Status</span>
+                    <span className="text-muted-foreground">Status</span>
                     <span className={`font-semibold ${
                       device.status === 'online' ? 'text-green-500' : 'text-red-500'
                     }`}>
@@ -603,29 +603,29 @@ const DeviceDetail = () => {
 
               {/* User được phân quyền RBAC — mọi người có quyền xem chi tiết đều thấy */}
               {apiDetail && Array.isArray(apiDetail.authorized_users) && (
-                <div className="bg-slate-900 rounded-lg p-6 border border-slate-700">
+                <div className="bg-background rounded-lg p-6 border border-border">
                   <div className="flex items-center space-x-2 mb-4">
                     <Users className="h-5 w-5 text-cyan-400" />
-                    <h3 className="text-lg font-semibold text-white">Người được phân quyền truy cập</h3>
+                    <h3 className="text-lg font-semibold text-foreground">Người được phân quyền truy cập</h3>
                   </div>
                   {apiDetail.authorized_users.length === 0 ? (
-                    <p className="text-slate-500 text-sm">Chưa có user nào được gán quyền (RBAC).</p>
+                    <p className="text-muted-foreground text-sm">Chưa có user nào được gán quyền (RBAC).</p>
                   ) : (
                     <ul className="space-y-3">
                       {apiDetail.authorized_users.map((u) => (
                         <li
                           key={u.user_id}
-                          className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-800 pb-3 last:border-0 last:pb-0"
+                          className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-3 last:border-0 last:pb-0"
                         >
                           <div>
-                            <p className="text-white font-medium">{u.fullname}</p>
-                            <p className="text-slate-500 text-sm">
-                              @{u.username} · ID <span className="font-mono text-slate-400">{u.user_id}</span>
+                            <p className="text-foreground font-medium">{u.fullname}</p>
+                            <p className="text-muted-foreground text-sm">
+                              @{u.username} · ID <span className="font-mono text-muted-foreground">{u.user_id}</span>
                             </p>
                           </div>
-                          <p className="text-slate-400 text-xs shrink-0">
+                          <p className="text-muted-foreground text-xs shrink-0">
                             Hết hạn quyền:{' '}
-                            <span className="text-slate-300">{isoDateToDisplay(u.expired_at)}</span>
+                            <span className="text-foreground/90">{isoDateToDisplay(u.expired_at)}</span>
                           </p>
                         </li>
                       ))}
@@ -636,10 +636,10 @@ const DeviceDetail = () => {
 
               {/* Gán tài khoản legacy (cột user_device_asignment_id) — chỉ admin */}
               {isAdmin() && apiDetail && (
-                <div className="bg-slate-900 rounded-lg p-6 border border-amber-900/40">
-                  <h3 className="text-lg font-semibold text-white mb-1">Gán tài khoản (legacy)</h3>
-                  <p className="text-slate-500 text-sm mb-4">
-                    Trường <span className="font-mono text-slate-400">user_device_asignment_id</span> trên bản ghi
+                <div className="bg-background rounded-lg p-6 border border-amber-900/40">
+                  <h3 className="text-lg font-semibold text-foreground mb-1">Gán tài khoản (legacy)</h3>
+                  <p className="text-muted-foreground text-sm mb-4">
+                    Trường <span className="font-mono text-muted-foreground">user_device_asignment_id</span> trên bản ghi
                     thiết bị. Chỉ admin xem và chỉnh sửa.
                   </p>
                   <form
@@ -671,19 +671,19 @@ const DeviceDetail = () => {
                     className="flex flex-col sm:flex-row gap-3 sm:items-end"
                   >
                     <div className="flex-1">
-                      <label className="block text-slate-400 text-sm mb-2">User ID gán thiết bị</label>
+                      <label className="block text-muted-foreground text-sm mb-2">User ID gán thiết bị</label>
                       <input
                         type="number"
                         min={0}
                         value={assignmentId}
                         onChange={(e) => setAssignmentId(e.target.value)}
-                        className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-white font-mono"
+                        className="w-full bg-card border border-border rounded-lg px-4 py-3 text-foreground font-mono"
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={assignmentSaving}
-                      className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50"
+                      className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-foreground rounded-lg disabled:opacity-50"
                     >
                       {assignmentSaving ? 'Đang lưu...' : 'Lưu'}
                     </button>
@@ -702,11 +702,11 @@ const DeviceDetail = () => {
           {activeTab === 'history' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Device History</h3>
-                <span className="text-slate-400 text-sm">{historyRows.length} records (30 phut)</span>
+                <h3 className="text-lg font-semibold text-foreground">Device History</h3>
+                <span className="text-muted-foreground text-sm">{historyRows.length} records (30 phut)</span>
               </div>
               {historyLoading && (
-                <div className="p-3 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 text-sm">
+                <div className="p-3 rounded-lg bg-background border border-border text-foreground/90 text-sm">
                   Dang tai lich su tu InfluxDB...
                 </div>
               )}
@@ -720,30 +720,30 @@ const DeviceDetail = () => {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-slate-900 border-b border-slate-700">
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
+                    <tr className="bg-background border-b border-border">
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-foreground/90">
                         #
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-foreground/90">
                         Parameter Value
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-foreground/90">
                         Timestamp
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-700">
+                  <tbody className="divide-y divide-border">
                     {historyRows.map((record, idx) => (
-                      <tr key={record.id} className="hover:bg-slate-900 transition-colors duration-150">
-                        <td className="px-6 py-4 text-slate-400 text-sm">
+                      <tr key={record.id} className="hover:bg-background transition-colors duration-150">
+                        <td className="px-6 py-4 text-muted-foreground text-sm">
                           {idx + 1}
                         </td>
-                        <td className="px-6 py-4 text-white font-medium">
+                        <td className="px-6 py-4 text-foreground font-medium">
                               {device.type === 'GPS'
                                 ? `X=${record.x.toFixed(2)} | Y=${record.y.toFixed(2)}`
                                 : `T=${record.temperature.toFixed(2)}°C | Vb=${record.vibration.toFixed(2)}mm/s | U=${record.voltage.toFixed(2)}V | I=${record.current.toFixed(2)}A`}
                         </td>
-                        <td className="px-6 py-4 text-slate-400 text-sm">
+                        <td className="px-6 py-4 text-muted-foreground text-sm">
                           {record.timestamp}
                         </td>
                       </tr>
@@ -757,9 +757,9 @@ const DeviceDetail = () => {
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-white">Device Dashboard</h3>
-                <p className="text-slate-400 text-sm">
-                  Real-time charts (30-minute history + live) for <span className="text-blue-400 font-mono font-semibold">{deviceId}</span>
+                <h3 className="text-lg font-semibold text-foreground">Device Dashboard</h3>
+                <p className="text-muted-foreground text-sm">
+                  Real-time charts (30-minute history + live) for <span className="text-primary font-mono font-semibold">{deviceId}</span>
                 </p>
                 {!WS_BASE && (
                   <div className="mt-3 p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-200 text-sm">
@@ -769,15 +769,15 @@ const DeviceDetail = () => {
               </div>
 
               {isAdmin() && (
-                <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 space-y-3">
-                  <h4 className="text-white font-semibold">Quan ly topic MQTT (admin)</h4>
+                <div className="bg-background rounded-xl p-4 border border-border space-y-3">
+                  <h4 className="text-foreground font-semibold">Quan ly topic MQTT (admin)</h4>
                   <div className="flex flex-wrap gap-2">
                     {topics.map((t) => (
-                      <span key={t} className="px-2 py-1 rounded bg-slate-800 text-slate-200 text-xs border border-slate-700">
+                      <span key={t} className="px-2 py-1 rounded bg-card text-foreground/90 text-xs border border-border">
                         {t}
                       </span>
                     ))}
-                    {topics.length === 0 && <span className="text-slate-400 text-sm">Chua co topic.</span>}
+                    {topics.length === 0 && <span className="text-muted-foreground text-sm">Chua co topic.</span>}
                   </div>
                   <div className="flex flex-col md:flex-row gap-3">
                     <input
@@ -785,7 +785,7 @@ const DeviceDetail = () => {
                       value={topicInput}
                       onChange={(e) => setTopicInput(e.target.value)}
                       placeholder="devices/101/telemetry"
-                      className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white"
+                      className="flex-1 bg-card border border-border rounded-lg px-3 py-2 text-foreground"
                     />
                     <button
                       type="button"
@@ -806,7 +806,7 @@ const DeviceDetail = () => {
                           .catch((err) => setTopicError(err?.message || 'Subscribe that bai'))
                           .finally(() => setTopicBusy(false));
                       }}
-                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-foreground"
                     >
                       Subscribe
                     </button>
@@ -828,7 +828,7 @@ const DeviceDetail = () => {
                           .catch((err) => setTopicError(err?.message || 'Unsubscribe that bai'))
                           .finally(() => setTopicBusy(false));
                       }}
-                      className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white"
+                      className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-foreground"
                     >
                       Unsubscribe
                     </button>
@@ -846,7 +846,7 @@ const DeviceDetail = () => {
                     return (
                       <div
                         key={metric.key}
-                        className={`min-w-0 bg-slate-900 rounded-xl p-6 border border-slate-700 ${
+                        className={`min-w-0 bg-background rounded-xl p-6 border border-border ${
                           fullscreenMetric === metric.key ? 'fixed inset-4 z-[80] overflow-hidden' : ''
                         }`}
                       >
@@ -856,8 +856,8 @@ const DeviceDetail = () => {
                               <Icon className="h-5 w-5" style={{ color: metric.color }} />
                             </div>
                             <div>
-                              <h4 className="text-white font-semibold">{metric.title}</h4>
-                              <p className="text-slate-400 text-sm">Location coordinates (X, Y)</p>
+                              <h4 className="text-foreground font-semibold">{metric.title}</h4>
+                              <p className="text-muted-foreground text-sm">Location coordinates (X, Y)</p>
                             </div>
                           </div>
                           <button
@@ -865,7 +865,7 @@ const DeviceDetail = () => {
                             onClick={() =>
                               setFullscreenMetric((prev) => (prev === metric.key ? null : metric.key))
                             }
-                            className="p-2 rounded-lg border border-slate-600 hover:bg-slate-700 text-slate-200"
+                            className="p-2 rounded-lg border border-border hover:bg-muted text-foreground/90"
                             title={fullscreenMetric === metric.key ? 'Thu nho bieu do' : 'Phong to bieu do'}
                           >
                             {fullscreenMetric === metric.key ? (
@@ -875,11 +875,11 @@ const DeviceDetail = () => {
                             )}
                           </button>
                         </div>
-                        <div className={`bg-slate-800 rounded-lg p-4 overflow-hidden ${
+                        <div className={`bg-card rounded-lg p-4 overflow-hidden ${
                           fullscreenMetric === metric.key ? 'h-[520px]' : 'h-[300px]'
                         }`}>
                           {realtimeSeries.length === 0 ? (
-                            <div className="flex items-center justify-center h-full text-slate-400">
+                            <div className="flex items-center justify-center h-full text-muted-foreground">
                               <p>Chờ dữ liệu GPS...</p>
                             </div>
                           ) : (
@@ -888,7 +888,7 @@ const DeviceDetail = () => {
                               <svg
                                 viewBox="0 0 1000 620"
                                 preserveAspectRatio="xMidYMid meet"
-                                className="w-full flex-1 min-h-0 border border-slate-700 rounded block"
+                                className="w-full flex-1 min-h-0 border border-border rounded block"
                               >
                                 <defs>
                                   <pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse">
@@ -940,12 +940,12 @@ const DeviceDetail = () => {
                               
                               {/* Latest GPS data display */}
                               {realtimeSeries.length > 0 && (
-                                <div className="bg-slate-900 rounded p-3 border border-slate-700 shrink-0">
-                                  <p className="text-slate-400 text-xs mb-2">Latest Reading:</p>
-                                  <p className="text-white font-mono text-sm break-all">
-                                    X: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].x.toFixed(2)}</span>, Y: <span className="text-blue-400">{realtimeSeries[realtimeSeries.length - 1].y.toFixed(2)}</span>
+                                <div className="bg-background rounded p-3 border border-border shrink-0">
+                                  <p className="text-muted-foreground text-xs mb-2">Latest Reading:</p>
+                                  <p className="text-foreground font-mono text-sm break-all">
+                                    X: <span className="text-primary">{realtimeSeries[realtimeSeries.length - 1].x.toFixed(2)}</span>, Y: <span className="text-primary">{realtimeSeries[realtimeSeries.length - 1].y.toFixed(2)}</span>
                                   </p>
-                                  <p className="text-slate-400 text-xs mt-1">Points: {realtimeSeries.length}</p>
+                                  <p className="text-muted-foreground text-xs mt-1">Points: {realtimeSeries.length}</p>
                                 </div>
                               )}
                             </div>
@@ -959,7 +959,7 @@ const DeviceDetail = () => {
                   return (
                     <div
                       key={metric.key}
-                      className={`min-w-0 bg-slate-900 rounded-xl p-6 border border-slate-700 ${
+                      className={`min-w-0 bg-background rounded-xl p-6 border border-border ${
                         fullscreenMetric === metric.key ? 'fixed inset-4 z-[80] overflow-hidden' : ''
                       }`}
                     >
@@ -969,8 +969,8 @@ const DeviceDetail = () => {
                             <Icon className="h-5 w-5" style={{ color: metric.color }} />
                           </div>
                           <div>
-                            <h4 className="text-white font-semibold">{metric.title}</h4>
-                            <p className="text-slate-400 text-sm">Realtime (time-series)</p>
+                            <h4 className="text-foreground font-semibold">{metric.title}</h4>
+                            <p className="text-muted-foreground text-sm">Realtime (time-series)</p>
                           </div>
                         </div>
                         <button
@@ -978,7 +978,7 @@ const DeviceDetail = () => {
                           onClick={() =>
                             setFullscreenMetric((prev) => (prev === metric.key ? null : metric.key))
                           }
-                          className="p-2 rounded-lg border border-slate-600 hover:bg-slate-700 text-slate-200"
+                          className="p-2 rounded-lg border border-border hover:bg-muted text-foreground/90"
                           title={fullscreenMetric === metric.key ? 'Thu nho bieu do' : 'Phong to bieu do'}
                         >
                           {fullscreenMetric === metric.key ? (
