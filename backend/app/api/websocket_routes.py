@@ -32,6 +32,7 @@ import time
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.deps import authenticate_ws_device, authenticate_ws_user
+from app.core.ingest import ingest_sensor_payload
 from app.core.realtime_hub import RealtimeHub
 from app.core.test_payload_codec import decode_coordinates_data_proto
 
@@ -159,7 +160,8 @@ async def ws_device(websocket: WebSocket, device_id: str) -> None:
                     decoded_payload["server_receive_ms"] = time.time_ns() // 1_000_000
                     decoded_payload.setdefault("device_id", str(device_id))
                     decoded_payload.setdefault("topic", f"ws/{device_id}")
-                    hub.publish_from_thread(decoded_payload)
+                    # Pipeline chung: ghi Influx + broadcast (không chỉ broadcast như trước).
+                    ingest_sensor_payload(websocket.app, decoded_payload)
                     continue
 
                 if not str(raw_text).strip():
@@ -172,7 +174,8 @@ async def ws_device(websocket: WebSocket, device_id: str) -> None:
                 payload["server_receive_ms"] = time.time_ns() // 1_000_000
                 payload.setdefault("device_id", str(device_id))
                 payload.setdefault("topic", f"ws/{device_id}")
-                hub.publish_from_thread(payload)
+                # Pipeline chung: ghi Influx + broadcast.
+                ingest_sensor_payload(websocket.app, payload)
             except RuntimeError as exc:
                 if "disconnect message" in str(exc):
                     break
@@ -273,8 +276,8 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
                         decoded_payload["server_receive_ms"] = time.time_ns() // 1_000_000
                         decoded_payload.setdefault("device_id", str(device_id))
                         decoded_payload.setdefault("topic", f"ws/{device_id}")
-                        # Push ESP32 uplink into realtime pipeline for /ws/global and /ws/devices/{id}.
-                        hub.publish_from_thread(decoded_payload)
+                        # Pipeline chung: ghi Influx + broadcast (/ws/global và /ws/devices/{id}).
+                        ingest_sensor_payload(websocket.app, decoded_payload)
                     await websocket.send_json(
                         {
                             "ok": True,
@@ -296,8 +299,8 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
                 payload["server_receive_ms"] = time.time_ns() // 1_000_000
                 payload.setdefault("device_id", device_id)
                 payload.setdefault("topic", f"ws/{device_id}")
-                # Push JSON uplink into realtime pipeline for dashboards.
-                hub.publish_from_thread(payload)
+                # Pipeline chung: ghi Influx + broadcast cho dashboards.
+                ingest_sensor_payload(websocket.app, payload)
 
                 await websocket.send_json({"ok": True, "device_id": device_id, "received": payload})
             except WebSocketDisconnect:

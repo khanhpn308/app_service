@@ -114,8 +114,11 @@ const GPSDashboard = ({ initialDevices = [] }) => {
 
   // Lọc thiết bị dựa trên location đang chọn và chuỗi tìm kiếm
   const filteredDevices = useMemo(() => {
+    const selectedLoc = String(selectedLocation || '').trim().toLowerCase();
     return (initialDevices || []).filter(d => {
-      const locationMatch = d.location === selectedLocation;
+      // So khớp location không phân biệt hoa/thường: payload gửi "FLOOR_1"
+      // nhưng tên file floorplan có thể là "Floor_1" -> vẫn phải khớp.
+      const locationMatch = String(d.location || '').trim().toLowerCase() === selectedLoc;
       const idStr = String(d.device_id || '').toLowerCase();
       const searchMatch = idStr.includes(searchQuery.toLowerCase());
       return locationMatch && searchMatch;

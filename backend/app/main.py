@@ -36,6 +36,7 @@ from app.core.db_migrate import (
 )
 from app.core.db_wait import wait_for_db
 from app.core.influx_service import InfluxService
+from app.core.ingest import ingest_sensor_payload
 from app.core.mqtt_subscriber import MqttSubscriber
 from app.core.realtime_hub import RealtimeHub
 from app.core.seed import ensure_default_admin, ensure_default_devices
@@ -108,8 +109,8 @@ async def lifespan(app: FastAPI):
     app.state.realtime_hub = realtime_hub
 
     def _handle_sensor_payload(payload: dict) -> None:
-        influx.write_sensor_point(payload)
-        realtime_hub.publish_from_thread(payload)
+        # Dùng pipeline chung (ghi Influx + broadcast) — cùng đường với WebSocket uplink.
+        ingest_sensor_payload(app, payload)
 
     def _resolve_ping_reply_topic(incoming_topic: str) -> str | None:
         t = str(incoming_topic or "").strip()
