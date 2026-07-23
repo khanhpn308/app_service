@@ -11,7 +11,7 @@ from app.api.map_groups_routes import router
 from app.core.deps import get_current_user, get_db
 from app.models.base import Base
 from app.models.map_group import MapGroup, MapGroupMembership
-from app.models.map_location import LocationUsing
+from app.models.map_location import LocationDeleted, LocationUsing
 from app.models.user import User
 
 
@@ -212,7 +212,7 @@ def test_owner_deletes_empty_group_but_member_cannot(api) -> None:
     assert db.get(MapGroup, group.group_id) is None
 
 
-def test_group_with_active_map_cannot_be_deleted_before_archive(api) -> None:
+def test_group_with_active_map_is_archived_before_group_delete(api) -> None:
     client, db, actor = api
     owner = add_user(db, "owner", 1)
     group = add_group(db, owner, "Protected")
@@ -235,7 +235,11 @@ def test_group_with_active_map_cannot_be_deleted_before_archive(api) -> None:
     db.commit()
     actor["user"] = owner
 
-    response = client.delete(f"/api/map-groups/{group.group_id}")
+    group_id = group.group_id
+    location_id = db.query(LocationUsing.location_id).scalar()
+    response = client.delete(f"/api/map-groups/{group_id}")
 
-    assert response.status_code == 409
-    assert db.get(MapGroup, group.group_id) is not None
+    assert response.status_code == 204
+    assert db.get(MapGroup, group_id) is None
+    assert db.get(LocationUsing, location_id) is None
+    assert db.get(LocationDeleted, location_id).delete_reason == "group_deleted"

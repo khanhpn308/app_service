@@ -11,9 +11,15 @@ REST API quản lý người dùng (chủ yếu **admin**).
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_admin
+from app.core.map_archive import LocationArchiveError
+from app.core.map_lifecycle import (
+    MapLifecycleError,
+    delete_user_with_map_lifecycle,
+)
 from app.core.user_expiry import deactivate_expired_users
 from app.models.device import Device
 from app.models.device_authorization import DeviceAuthorization
@@ -89,5 +95,19 @@ def delete_user(
     target = db.query(User).filter(User.user_id == user_id).first()
     if target is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
-    db.delete(target)
-    db.commit()
+    try:
+        delete_user_with_map_lifecycle(
+            db,
+            target.user_id,
+            deleted_by=current,
+        )
+        db.commit()
+    except MapLifecycleError as error:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Không tìm thấy người dùng") from error
+    except (LocationArchiveError, IntegrityError) as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Không thể archive dữ liệu bản đồ của người dùng",
+        ) from error

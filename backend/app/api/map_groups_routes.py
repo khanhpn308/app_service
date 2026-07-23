@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.core.map_access import can_manage_group, can_view_group, is_user_active
+from app.core.map_archive import LocationArchiveError
+from app.core.map_lifecycle import MapLifecycleError, archive_and_delete_group
 from app.core.rate_limit import limiter
 from app.core.security import decode_token
 from app.models.map_group import MapGroup, MapGroupMembership
-from app.models.map_location import LocationUsing
 from app.models.user import User
 from app.schemas.map_groups import (
     GroupCreate,
@@ -216,26 +217,29 @@ def rename_group(
 
 
 @group_router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_empty_group(
+def delete_group(
     group_id: int,
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ) -> None:
-    """Delete an empty managed group; map cascade belongs to Phase 4."""
+    """Archive every active map and hard-delete a managed group atomically."""
     group = _manageable_group_or_404(db, group_id, actor)
-    has_active_maps = (
-        db.query(LocationUsing.location_id)
-        .filter(LocationUsing.group_id == group.group_id)
-        .first()
-        is not None
-    )
-    if has_active_maps:
+    try:
+        archive_and_delete_group(
+            db,
+            group.group_id,
+            deleted_by=actor,
+        )
+        db.commit()
+    except MapLifecycleError as error:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Không tìm thấy nhóm") from error
+    except (LocationArchiveError, IntegrityError) as error:
+        db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="Nhóm còn bản đồ đang sử dụng; cần archive trước khi xóa",
-        )
-    db.delete(group)
-    db.commit()
+            detail="Không thể archive toàn bộ bản đồ của nhóm",
+        ) from error
 
 
 def _membership_public(
