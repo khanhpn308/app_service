@@ -6,20 +6,32 @@ Chạy từ ``main.lifespan`` sau khi schema sẵn sàng. Mật khẩu admin m�
 Hàm ``ensure_*`` idempotent: nếu dữ liệu đã có thì thoát sớm (tránh duplicate).
 """
 
+import os
 from datetime import date
+from pathlib import Path
 
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
+from app.core.webp_validator import WEBP_MIME_TYPE, validate_webp
 from app.models.device import Device
+from app.models.map_group import MapGroup
+from app.models.map_location import LocationDeleted, LocationUsing
 from app.models.user import User
 
 DEFAULT_ADMIN_USERNAME = "AD00000"
 # Default password for first-time setup; change after login in production.
 DEFAULT_ADMIN_PASSWORD = "khanhxx007"
 DEFAULT_ADMIN_CCCD = "888888888888"
+SYSTEM_MAP_GROUP_NAME = "System Debug Maps"
+SYSTEM_FLOORPLANS = (
+    ("Floor_1", "Floor_1.webp"),
+    ("Floor_2", "Floor_2.webp"),
+    ("Floor_3", "Floor_3.webp"),
+    ("Floor_4", "Floor_4.webp"),
+)
 
 
 def ensure_default_admin(db: Session) -> None:
@@ -71,3 +83,87 @@ def ensure_default_devices(db: Session) -> None:
         db.commit()
     except IntegrityError:
         db.rollback()
+
+
+def _default_floorplan_dir() -> Path:
+    configured = os.getenv("FLOORPLAN_SEED_DIR")
+    candidates = [
+        Path(configured) if configured else None,
+        Path("/app/seed_floorplans"),
+        Path(__file__).resolve().parents[3] / "src" / "assets" / "floorplans",
+    ]
+    for candidate in candidates:
+        if candidate is not None and candidate.is_dir():
+            return candidate
+    raise FileNotFoundError(
+        "Không tìm thấy thư mục seed floorplan; đặt FLOORPLAN_SEED_DIR."
+    )
+
+
+def ensure_default_maps(
+    db: Session,
+    *,
+    floorplan_dir: Path | None = None,
+) -> None:
+    """Seed four system WebPs once across both active and archive tables."""
+    admin = db.execute(
+        select(User)
+        .where(User.username == DEFAULT_ADMIN_USERNAME)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if admin is None:
+        raise RuntimeError("Default admin must exist before seeding system maps.")
+
+    group = db.execute(
+        select(MapGroup).where(
+            MapGroup.owner_user_id == admin.user_id,
+            func.lower(MapGroup.name) == SYSTEM_MAP_GROUP_NAME.lower(),
+        )
+    ).scalar_one_or_none()
+    if group is None:
+        group = MapGroup(
+            name=SYSTEM_MAP_GROUP_NAME,
+            owner_user_id=admin.user_id,
+            created_by_user_id=admin.user_id,
+        )
+        db.add(group)
+        db.flush()
+
+    source_dir = Path(floorplan_dir) if floorplan_dir else _default_floorplan_dir()
+    for location, filename in SYSTEM_FLOORPLANS:
+        normalized = location.lower()
+        active_exists = db.execute(
+            select(LocationUsing.location_id).where(
+                func.lower(LocationUsing.location) == normalized
+            )
+        ).first()
+        archived_exists = db.execute(
+            select(LocationDeleted.location_id).where(
+                func.lower(LocationDeleted.location) == normalized
+            )
+        ).first()
+        if active_exists is not None or archived_exists is not None:
+            continue
+
+        content = (source_dir / filename).read_bytes()
+        metadata = validate_webp(
+            content,
+            filename=filename,
+            content_type=WEBP_MIME_TYPE,
+        )
+        db.add(
+            LocationUsing(
+                location=location,
+                image_data=content,
+                mime_type=WEBP_MIME_TYPE,
+                original_filename=filename,
+                checksum_sha256=metadata.checksum_sha256,
+                file_size_bytes=metadata.file_size_bytes,
+                width=metadata.width,
+                height=metadata.height,
+                group_id=group.group_id,
+                owner_user_id=admin.user_id,
+                created_by_user_id=admin.user_id,
+            )
+        )
+    db.commit()

@@ -39,7 +39,11 @@ from app.core.influx_service import InfluxService
 from app.core.ingest import ingest_sensor_payload
 from app.core.mqtt_subscriber import MqttSubscriber
 from app.core.realtime_hub import RealtimeHub
-from app.core.seed import ensure_default_admin, ensure_default_devices
+from app.core.seed import (
+    ensure_default_admin,
+    ensure_default_devices,
+    ensure_default_maps,
+)
 from app.core.user_expiry import deactivate_expired_users
 from app.models.device import Device
 from app.models import device  # noqa: F401 — đăng ký model với metadata
@@ -90,6 +94,7 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         ensure_default_admin(db)
         ensure_default_devices(db)
+        ensure_default_maps(db)
         deactivate_expired_users(db)
 
     
