@@ -26,6 +26,7 @@ import {
 import GroupEditor from './GroupEditor'
 import GroupListPanel from './GroupListPanel'
 import InvitationPanel from './InvitationPanel'
+import DeletedMapsPanel from './DeletedMapsPanel'
 
 function MapGroupManagerDialog() {
   const { user } = useAuth()
@@ -212,6 +213,16 @@ function MapGroupManagerDialog() {
           >
             Lời mời ({invitations.length})
           </Button>
+          {user?.role?.toLowerCase() === 'admin' && (
+            <Button
+              type="button"
+              variant={activeTab === 'deleted' ? 'default' : 'ghost'}
+              aria-pressed={activeTab === 'deleted'}
+              onClick={() => setActiveTab('deleted')}
+            >
+              Lịch sử map đã xóa
+            </Button>
+          )}
         </div>
 
         {error && (
@@ -226,7 +237,9 @@ function MapGroupManagerDialog() {
           </div>
         )}
 
-        {loading ? (
+        {activeTab === 'deleted' ? (
+          <DeletedMapsPanel />
+        ) : loading ? (
           <div role="status" className="py-10 text-center text-sm text-slate-500">
             Đang tải dữ liệu nhóm...
           </div>

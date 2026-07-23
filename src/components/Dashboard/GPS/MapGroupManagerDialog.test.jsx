@@ -14,6 +14,7 @@ import {
   renameMapGroup,
   respondToMapGroupInvitation,
 } from '../../../lib/mapGroupsApi';
+import { listDeletedMaps } from '../../../lib/mapsApi';
 
 
 let currentUser = { user_id: 1, username: 'owner', role: 'user' };
@@ -32,6 +33,10 @@ vi.mock('../../../lib/mapGroupsApi', () => ({
   removeMapGroupMember: vi.fn(),
   renameMapGroup: vi.fn(),
   respondToMapGroupInvitation: vi.fn(),
+}));
+
+vi.mock('../../../lib/mapsApi', () => ({
+  listDeletedMaps: vi.fn(),
 }));
 
 
@@ -93,6 +98,22 @@ describe('MapGroupManagerDialog', () => {
     inviteMapGroupMember.mockResolvedValue({});
     removeMapGroupMember.mockResolvedValue(null);
     respondToMapGroupInvitation.mockResolvedValue({});
+    listDeletedMaps.mockResolvedValue({
+      data: [
+        {
+          location_id: 8,
+          location: 'OLD_FLOOR',
+          group_name_snapshot: 'Nhà máy cũ',
+          owner_username_snapshot: 'owner',
+          deleted_by_username_snapshot: 'admin',
+          deleted_at: '2026-07-23T10:00:00',
+          delete_reason: 'map_deleted',
+        },
+      ],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
   });
 
   it('loads visible groups and marks accepted-member groups read-only', async () => {
@@ -148,6 +169,20 @@ describe('MapGroupManagerDialog', () => {
     await waitFor(() => {
       expect(listMyMapGroupInvitations).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('shows paginated deleted-map history only to admins', async () => {
+    currentUser = { user_id: 99, username: 'admin', role: 'admin' };
+    const user = userEvent.setup();
+    render(<MapGroupManagerDialog />);
+    await user.click(screen.getByRole('button', { name: 'Quản lý nhóm' }));
+    await screen.findByText('Factory A');
+
+    await user.click(screen.getByRole('button', { name: 'Lịch sử map đã xóa' }));
+
+    expect(await screen.findByText('OLD_FLOOR')).toBeTruthy();
+    expect(screen.getByText('Nhà máy cũ')).toBeTruthy();
+    expect(listDeletedMaps).toHaveBeenCalledWith({ limit: 20, offset: 0 });
   });
 
   it('renders a recoverable error when loading fails', async () => {
