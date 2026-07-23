@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import { Activity, Gauge, Maximize2, Minimize2, Thermometer, Waves, Zap } from 'lucide-react';
 import { apiFetch } from '../lib/api';
-import { wsUrl } from '../lib/wsUrl';
+import { openWebSocket } from '../lib/wsUrl';
 import { useAuth } from '../contexts/AuthContext';
 import { PageHeader } from '../components/common/PageHeader';
 
@@ -309,15 +309,14 @@ export default function GlobalDashboard() {
   }, [isAdmin]);
 
   useEffect(() => {
-    const url = WS_BASE ? wsUrl('/ws/global', WS_BASE) : null;
-    if (!url) return undefined;
+    if (!WS_BASE) return undefined;
 
     let closedByEffect = false;
 
     const connect = () => {
       if (closedByEffect) return;
 
-      const ws = new WebSocket(url);
+      const ws = openWebSocket('/ws/global', WS_BASE);
       wsRef.current = ws;
 
       ws.onmessage = (ev) => {

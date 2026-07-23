@@ -21,6 +21,8 @@ from app.models.device import Device
 from app.models.user import User
 
 security = HTTPBearer(auto_error=False)
+WS_USER_AUTH_SUBPROTOCOL = "iot-jwt"
+WS_DEVICE_AUTH_SUBPROTOCOL = "iot-device"
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -91,18 +93,46 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-def _ws_extract_token(websocket: WebSocket) -> str | None:
-    """Lấy JWT từ WebSocket: ưu tiên query ``?access_token=``, fallback header Bearer.
+def _ws_subprotocol_credentials(
+    websocket: WebSocket,
+    expected_protocol: str,
+) -> str | None:
+    """Read a credential paired with a known WebSocket subprotocol."""
+    raw_protocols = websocket.headers.get("sec-websocket-protocol")
+    if not raw_protocols:
+        return None
+    protocols = [part.strip() for part in raw_protocols.split(",") if part.strip()]
+    if len(protocols) != 2 or protocols[0] != expected_protocol:
+        return None
+    return protocols[1]
 
-    Frontend không gửi được custom header trong WebSocket handshake của trình duyệt nên
-    token thường nằm ở query. Header chỉ dùng được cho client không phải browser.
-    """
-    token = websocket.query_params.get("access_token")
+def _ws_extract_token(websocket: WebSocket) -> str | None:
+    """Read frontend JWT from a subprotocol, with Bearer header for non-browser clients."""
+    token = _ws_subprotocol_credentials(websocket, WS_USER_AUTH_SUBPROTOCOL)
     if token:
         return token
     auth = websocket.headers.get("authorization") or websocket.headers.get("Authorization")
     if auth and auth.lower().startswith("bearer "):
         return auth[7:].strip()
+    return None
+
+def _ws_extract_device_password(websocket: WebSocket) -> str | None:
+    """Read device credential without putting it in the request URL."""
+    password = _ws_subprotocol_credentials(websocket, WS_DEVICE_AUTH_SUBPROTOCOL)
+    if password:
+        return password
+    return websocket.headers.get("x-device-password")
+
+def ws_user_auth_subprotocol(websocket: WebSocket) -> str | None:
+    """Return the safe protocol name to negotiate after successful JWT auth."""
+    if _ws_subprotocol_credentials(websocket, WS_USER_AUTH_SUBPROTOCOL):
+        return WS_USER_AUTH_SUBPROTOCOL
+    return None
+
+def ws_device_auth_subprotocol(websocket: WebSocket) -> str | None:
+    """Return the safe protocol name to negotiate after successful device auth."""
+    if _ws_subprotocol_credentials(websocket, WS_DEVICE_AUTH_SUBPROTOCOL):
+        return WS_DEVICE_AUTH_SUBPROTOCOL
     return None
 
 
@@ -142,10 +172,11 @@ async def authenticate_ws_user(websocket: WebSocket) -> User | None:
 async def authenticate_ws_device(websocket: WebSocket, device_id: str) -> Device | None:
     """Xác thực kết nối uplink từ thiết bị (ESP32) bằng device credential.
 
-    Credential lấy từ query ``?device_password=`` (hoặc header ``x-device-password``), so khớp
-    với ``device.password`` đã hash. Trả ``Device`` nếu hợp lệ, ngược lại ``close(1008)`` + ``None``.
+    Credential lấy từ subprotocol ``iot-device`` hoặc header ``x-device-password``,
+    so khớp với ``device.password`` đã hash. Trả ``Device`` nếu hợp lệ, ngược lại
+    ``close(1008)`` + ``None``.
     """
-    pwd = websocket.query_params.get("device_password") or websocket.headers.get("x-device-password")
+    pwd = _ws_extract_device_password(websocket)
     if not pwd:
         await websocket.close(code=1008)
         return None

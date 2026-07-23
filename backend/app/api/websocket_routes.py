@@ -31,7 +31,12 @@ import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.core.deps import authenticate_ws_device, authenticate_ws_user
+from app.core.deps import (
+    authenticate_ws_device,
+    authenticate_ws_user,
+    ws_device_auth_subprotocol,
+    ws_user_auth_subprotocol,
+)
 from app.core.ingest import ingest_sensor_payload
 from app.core.realtime_hub import RealtimeHub
 from app.core.test_payload_codec import decode_coordinates_data_proto
@@ -85,7 +90,10 @@ async def ws_global(websocket: WebSocket) -> None:
         return
     if await authenticate_ws_user(websocket) is None:
         return  # authenticate_ws_user đã close(1008)
-    await hub.connect_global(websocket)
+    await hub.connect_global(
+        websocket,
+        subprotocol=ws_user_auth_subprotocol(websocket),
+    )
     try:
         while True:
             await websocket.receive_text()
@@ -135,7 +143,11 @@ async def ws_device(websocket: WebSocket, device_id: str) -> None:
         return
     if await authenticate_ws_user(websocket) is None:
         return  # authenticate_ws_user đã close(1008)
-    await hub.connect_device(websocket, device_id)
+    await hub.connect_device(
+        websocket,
+        device_id,
+        subprotocol=ws_user_auth_subprotocol(websocket),
+    )
     try:
         while True:
             try:
@@ -241,7 +253,11 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
     if await authenticate_ws_device(websocket, device_id) is None:
         return  # authenticate_ws_device đã close(1008)
 
-    await hub.connect_esp32(websocket, device_id)
+    await hub.connect_esp32(
+        websocket,
+        device_id,
+        subprotocol=ws_device_auth_subprotocol(websocket),
+    )
     try:
         await websocket.send_json({"ok": True, "device_id": device_id, "message": "connected"})
         while True:

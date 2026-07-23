@@ -1,13 +1,9 @@
 /**
- * Dựng URL WebSocket có kèm JWT để backend xác thực.
- *
- * Backend yêu cầu mọi WS client (frontend) gửi token qua query `?access_token=`
- * (trình duyệt không set được custom header trong WS handshake). Token đọc từ
- * `localStorage('iot_token')` — cùng key với `lib/api.js`.
+ * Dựng URL WebSocket không chứa credential.
  *
  * @param {string} path - Đường dẫn WS từ gốc, ví dụ `/ws/global` hoặc `/ws/devices/123`
  * @param {string} [base] - Base tuỳ chọn (vd `VITE_WS_URL`). Rỗng = auto từ origin hiện tại.
- * @returns {string} URL đầy đủ kèm token (nếu có)
+ * @returns {string} URL đầy đủ
  */
 export function wsUrl(path, base) {
   let origin = base;
@@ -15,9 +11,17 @@ export function wsUrl(path, base) {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     origin = `${proto}://${window.location.host}`;
   }
+  return `${origin}${path}`;
+}
+
+/**
+ * Mở WebSocket với JWT trong Sec-WebSocket-Protocol thay vì query string.
+ * Token không xuất hiện trong access log của reverse proxy hoặc Uvicorn.
+ */
+export function openWebSocket(path, base, WebSocketImpl = WebSocket) {
   const token = localStorage.getItem('iot_token');
-  const sep = path.includes('?') ? '&' : '?';
+  const url = wsUrl(path, base);
   return token
-    ? `${origin}${path}${sep}access_token=${encodeURIComponent(token)}`
-    : `${origin}${path}`;
+    ? new WebSocketImpl(url, ['iot-jwt', token])
+    : new WebSocketImpl(url);
 }

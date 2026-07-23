@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Cpu, MapPin, Clock, ExternalLink, Plus, Search, Trash2 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
-import { wsUrl } from '../lib/wsUrl';
+import { openWebSocket } from '../lib/wsUrl';
 import { toUiStatus } from '../lib/deviceStatus';
 import AddDeviceModal from '../components/AddDeviceModal';
 import { Skeleton } from '../components/ui/skeleton';
@@ -168,8 +168,8 @@ const Devices = () => {
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    // WebSocket connection for live updates (kèm JWT để backend xác thực)
-    const ws = new WebSocket(wsUrl('/ws/global'));
+    // JWT đi qua WebSocket subprotocol để không lộ trong access log.
+    const ws = openWebSocket('/ws/global');
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);

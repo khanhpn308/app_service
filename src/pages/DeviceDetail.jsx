@@ -29,7 +29,7 @@ import {
   Users,
 } from 'lucide-react';
 import { apiFetch } from '../lib/api';
-import { wsUrl } from '../lib/wsUrl';
+import { openWebSocket } from '../lib/wsUrl';
 import { useAuth } from '../contexts/AuthContext';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 
@@ -275,17 +275,15 @@ const DeviceDetail = () => {
     // - { ts, deviceId, current, voltage, temperature, vibration }
     // - { ts, current, voltage, temperature, vibration }  (implicit current device)
     // Nếu có topic, dùng global channel rồi lọc theo topic để tránh lệch device_id DB vs payload.
-    const url = WS_BASE
-      ? (preferredTopic ? wsUrl('/ws/global', WS_BASE) : wsUrl(`/ws/devices/${deviceId}`, WS_BASE))
-      : null;
-    if (!url) return undefined;
+    const wsPath = preferredTopic ? '/ws/global' : `/ws/devices/${deviceId}`;
+    if (!WS_BASE) return undefined;
 
     let closedByEffect = false;
 
     const connect = () => {
       if (closedByEffect) return;
 
-      const ws = new WebSocket(url);
+      const ws = openWebSocket(wsPath, WS_BASE);
       wsRef.current = ws;
 
       ws.onmessage = (ev) => {

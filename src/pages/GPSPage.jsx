@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import GPSDashboard from '../components/Dashboard/GPS/GPSDashboard';
 import { apiFetch } from '../lib/api';
-import { wsUrl } from '../lib/wsUrl';
+import { openWebSocket } from '../lib/wsUrl';
 import { mergeDeviceCatalog, mergeGpsMessage } from './gpsRealtime';
 
 function resolveWsBase() {
@@ -38,12 +38,10 @@ const GPSPage = () => {
 
   useEffect(() => {
     let closedByEffect = false;
-    const url = wsUrl('/ws/global', resolveWsBase());
-
     const connect = () => {
       if (closedByEffect) return;
 
-      const websocket = new WebSocket(url);
+      const websocket = openWebSocket('/ws/global', resolveWsBase());
       wsRef.current = websocket;
 
       websocket.onmessage = (event) => {

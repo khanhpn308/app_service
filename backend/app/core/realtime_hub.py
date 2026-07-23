@@ -64,22 +64,39 @@ class RealtimeHub:
             except Exception:  # noqa: BLE001
                 pass
 
-    async def connect_global(self, websocket: WebSocket) -> None:
+    async def connect_global(
+        self,
+        websocket: WebSocket,
+        *,
+        subprotocol: str | None = None,
+    ) -> None:
         """Accept kết nối và thêm vào nhóm global dashboard."""
-        await websocket.accept()
+        await websocket.accept(subprotocol=subprotocol)
         async with self._lock:
             self._global_clients.add(websocket)
 
-    async def connect_device(self, websocket: WebSocket, device_id: str) -> None:
+    async def connect_device(
+        self,
+        websocket: WebSocket,
+        device_id: str,
+        *,
+        subprotocol: str | None = None,
+    ) -> None:
         """Accept kết nối và thêm vào nhóm dashboard của một thiết bị."""
-        await websocket.accept()
+        await websocket.accept(subprotocol=subprotocol)
         key = str(device_id)
         async with self._lock:
             self._device_clients[key].add(websocket)
 
-    async def connect_esp32(self, websocket: WebSocket, device_id: str) -> None:
+    async def connect_esp32(
+        self,
+        websocket: WebSocket,
+        device_id: str,
+        *,
+        subprotocol: str | None = None,
+    ) -> None:
         """Accept kết nối và thêm ESP32 vào nhóm client theo device_id."""
-        await websocket.accept()
+        await websocket.accept(subprotocol=subprotocol)
         key = str(device_id)
         async with self._lock:
             self._esp32_clients[key].add(websocket)
