@@ -24,6 +24,10 @@ export default defineConfig({
     reportCompressedSize: false,
     chunkSizeWarningLimit: 1200,
   },
+  test: {
+    environment: 'jsdom',
+    clearMocks: true,
+  },
   server: {
     port: 3000,
     strictPort: true,

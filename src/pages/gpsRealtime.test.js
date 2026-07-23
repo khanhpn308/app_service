@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { expect, test } from 'vitest';
 
 import { mergeDeviceCatalog, mergeGpsMessage } from './gpsRealtime.js';
 
@@ -15,7 +14,7 @@ test('mergeGpsMessage updates coordinates immediately for a GPS payload', () => 
     server_receive_ms: 1_721_234_567_890,
   });
 
-  assert.deepEqual(result, [
+  expect(result).toEqual([
     {
       device_id: 101,
       location: 'Floor_2',
@@ -35,14 +34,14 @@ test('mergeGpsMessage ignores non-GPS telemetry', () => {
     temperature: 28,
   });
 
-  assert.equal(result, devices);
+  expect(result).toBe(devices);
 });
 
 test('mergeDeviceCatalog preserves a realtime position received before the catalog', () => {
   const liveDevices = [{ device_id: '101', x: 20, y: 30, location: 'Floor_2' }];
   const catalog = [{ device_id: 101, devicename: 'Tracker 101', location: 'Floor_1' }];
 
-  assert.deepEqual(mergeDeviceCatalog(liveDevices, catalog), [
+  expect(mergeDeviceCatalog(liveDevices, catalog)).toEqual([
     {
       device_id: 101,
       devicename: 'Tracker 101',
@@ -60,7 +59,7 @@ test('mergeGpsMessage accepts backend batches and discovers a new tracker', () =
     ],
   });
 
-  assert.deepEqual(result, [
+  expect(result).toEqual([
     {
       device_id: 202,
       x: 12.5,
