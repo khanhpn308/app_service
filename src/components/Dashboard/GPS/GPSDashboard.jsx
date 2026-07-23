@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import MapViewer from './MapViewer';
+import MapGroupManagerDialog from './MapGroupManagerDialog';
 import { apiFetch } from '../../../lib/api';
 
 const getColor = (id) => {
@@ -128,7 +129,7 @@ const GPSDashboard = ({ initialDevices = [] }) => {
   return (
     <div className="flex h-full flex-col bg-white">
       {/* Thanh công cụ lọc */}
-      <div className="flex items-center gap-4 p-4 border-b border-gray-100">
+      <div className="flex flex-wrap items-center gap-4 p-4 border-b border-gray-100">
         <div className="flex flex-col">
           <label className="text-[10px] font-bold text-gray-400 uppercase mb-1">Khu vực (Map)</label>
           <select
@@ -145,7 +146,7 @@ const GPSDashboard = ({ initialDevices = [] }) => {
           </select>
         </div>
 
-        <div className="flex flex-col flex-1 max-w-md">
+        <div className="flex min-w-[14rem] flex-1 flex-col max-w-md">
           <label className="text-[10px] font-bold text-gray-400 uppercase mb-1">Tìm thiết bị</label>
           <div className="relative">
             <input
@@ -157,6 +158,10 @@ const GPSDashboard = ({ initialDevices = [] }) => {
             />
             <span className="absolute left-3 top-2 text-gray-400">🔍</span>
           </div>
+        </div>
+
+        <div className="ml-auto self-end">
+          <MapGroupManagerDialog />
         </div>
       </div>
 
