@@ -11,4 +11,6 @@ PyJWT==2.10.1
 paho-mqtt==2.1.0
 influxdb-client==1.48.0
 slowapi==0.1.9
+Pillow==12.3.0
+python-multipart==0.0.32
 
