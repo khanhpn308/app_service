@@ -8,7 +8,9 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
+    Response,
     UploadFile,
     status,
 )
@@ -19,6 +21,11 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.core.map_access import can_manage_group, can_view_group
+from app.core.map_archive import (
+    DeleteReason,
+    LocationArchiveError,
+    archive_location,
+)
 from app.core.rate_limit import limiter
 from app.core.security import decode_token
 from app.core.webp_validator import (
@@ -28,11 +35,15 @@ from app.core.webp_validator import (
     validate_webp,
 )
 from app.models.map_group import MapGroup
-from app.models.map_location import LocationUsing
+from app.models.map_location import LocationDeleted, LocationUsing
 from app.models.user import User
-from app.schemas.maps import MapPublic
+from app.schemas.maps import DeletedMapPage, DeletedMapPublic, MapPublic
 
 router = APIRouter(tags=["maps"])
+
+
+def _is_admin(user: User) -> bool:
+    return (user.role or "").lower() == "admin"
 
 
 def _upload_rate_key(request: Request) -> str:
@@ -221,3 +232,102 @@ async def upload_group_map(
         ) from error
     db.refresh(active)
     return _map_public(active)
+
+
+@router.get("/maps/{map_id}/image")
+def get_map_image(
+    map_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> Response:
+    group_id = db.execute(
+        select(LocationUsing.group_id).where(LocationUsing.location_id == map_id)
+    ).scalar_one_or_none()
+    if group_id is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản đồ")
+    _viewable_group_or_404(db, group_id, actor)
+    image = db.execute(
+        select(LocationUsing.image_data, LocationUsing.mime_type).where(
+            LocationUsing.location_id == map_id
+        )
+    ).one()
+    return Response(
+        content=image.image_data,
+        media_type=image.mime_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.delete("/maps/{map_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_map(
+    map_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> None:
+    group_id = db.execute(
+        select(LocationUsing.group_id).where(LocationUsing.location_id == map_id)
+    ).scalar_one_or_none()
+    if group_id is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản đồ")
+    _manageable_group_or_404(db, group_id, actor)
+    try:
+        archive_location(
+            db,
+            map_id,
+            deleted_by=actor,
+            reason=DeleteReason.MAP_DELETED,
+        )
+        db.commit()
+    except LocationArchiveError as error:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản đồ") from error
+
+
+@router.get("/admin/deleted-maps", response_model=DeletedMapPage)
+def list_deleted_maps(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> DeletedMapPage:
+    if not _is_admin(actor):
+        raise HTTPException(status_code=403, detail="Admin role required")
+    total = db.execute(select(func.count(LocationDeleted.location_id))).scalar_one()
+    rows = db.execute(
+        select(
+            LocationDeleted.location_id,
+            LocationDeleted.location,
+            LocationDeleted.mime_type,
+            LocationDeleted.original_filename,
+            LocationDeleted.checksum_sha256,
+            LocationDeleted.file_size_bytes,
+            LocationDeleted.width,
+            LocationDeleted.height,
+            LocationDeleted.group_id_snapshot,
+            LocationDeleted.group_name_snapshot,
+            LocationDeleted.owner_user_id_snapshot,
+            LocationDeleted.owner_username_snapshot,
+            LocationDeleted.created_by_user_id_snapshot,
+            LocationDeleted.created_by_username_snapshot,
+            LocationDeleted.created_at,
+            LocationDeleted.deleted_by_user_id_snapshot,
+            LocationDeleted.deleted_by_username_snapshot,
+            LocationDeleted.deleted_at,
+            LocationDeleted.delete_reason,
+        )
+        .order_by(
+            LocationDeleted.deleted_at.desc(),
+            LocationDeleted.location_id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    return DeletedMapPage(
+        data=[DeletedMapPublic(**row._mapping) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

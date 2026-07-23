@@ -39,7 +39,11 @@ class LocationUsing(Base):
         ),
         Index("idx_locations_using_group", "group_id"),
         Index("idx_locations_using_owner", "owner_user_id"),
-        {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_0900_ai_ci"},
+        {
+            "mysql_charset": "utf8mb4",
+            "mysql_collate": "utf8mb4_0900_ai_ci",
+            "sqlite_autoincrement": True,
+        },
     )
 
     location_id: Mapped[int] = mapped_column(

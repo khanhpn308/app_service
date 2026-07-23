@@ -1,68 +1,47 @@
-import os
+"""Backward-compatible floorplan delivery backed by MySQL."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_db
+from app.core.map_access import can_view_group
+from app.models.map_group import MapGroup
+from app.models.map_location import LocationUsing
 from app.models.user import User
 
 router = APIRouter(prefix="/floorplans", tags=["floorplans"])
 
 
-def get_floorplan_dir() -> str:
-    env_path = os.getenv("FLOORPLAN_DIR")
-    if env_path and os.path.exists(env_path):
-        return os.path.abspath(env_path)
-
-    try:
-        current_file = os.path.abspath(__file__)
-        api_dir = os.path.dirname(current_file)
-        app_dir = os.path.dirname(api_dir)
-        backend_dir = os.path.dirname(app_dir)
-
-        path1 = os.path.abspath(os.path.join(backend_dir, "..", "src", "assets", "floorplans"))
-        if os.path.exists(path1):
-            return path1
-
-        path2 = os.path.abspath(os.path.join(os.getcwd(), "..", "src", "assets", "floorplans"))
-        if os.path.exists(path2):
-            return path2
-
-        return path1
-    except Exception:
-        return "../src/assets/floorplans"
-
-
 @router.get("/{location_name}.webp")
-def get_floorplan_webp(location_name: str, user: User = Depends(get_current_user)):
-    target_dir = get_floorplan_dir()
-    if not target_dir or not os.path.exists(target_dir):
-        raise HTTPException(status_code=404, detail="Floorplan directory not found")
-
+def get_floorplan_webp(
+    location_name: str,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> Response:
     wanted = str(location_name or "").strip()
-    # Chống path traversal: từ chối separator và "..".
-    if not wanted or "/" in wanted or "\\" in wanted or ".." in wanted:
-        raise HTTPException(status_code=404, detail="Floorplan not found")
-
-    wanted_lower = wanted.lower()
-    real_dir = os.path.realpath(target_dir)
-    for file_name in os.listdir(target_dir):
-        if not file_name.lower().endswith(".webp"):
-            continue
-        stem, _ = os.path.splitext(file_name)
-        if stem.lower() == wanted_lower:
-            file_path = os.path.join(target_dir, file_name)
-            # Xác nhận path đã resolve vẫn nằm trong thư mục cho phép.
-            if os.path.commonpath([real_dir, os.path.realpath(file_path)]) != real_dir:
-                raise HTTPException(status_code=404, detail="Floorplan not found")
-            return FileResponse(
-                file_path,
-                media_type="image/webp",
-                filename=file_name,
-                headers={
-                    # Allow browser/proxy caching (image content is static)
-                    "Cache-Control": "public, max-age=86400",
-                },
-            )
-
-    raise HTTPException(status_code=404, detail="Floorplan not found")
+    if not wanted:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản đồ")
+    metadata = db.execute(
+        select(LocationUsing.location_id, LocationUsing.group_id).where(
+            func.lower(LocationUsing.location) == wanted.lower()
+        )
+    ).one_or_none()
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản đồ")
+    group = db.get(MapGroup, metadata.group_id)
+    if group is None or not can_view_group(db, actor, group):
+        raise HTTPException(status_code=404, detail="Không tìm thấy bản đồ")
+    image = db.execute(
+        select(LocationUsing.image_data, LocationUsing.mime_type).where(
+            LocationUsing.location_id == metadata.location_id
+        )
+    ).one()
+    return Response(
+        content=image.image_data,
+        media_type=image.mime_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
