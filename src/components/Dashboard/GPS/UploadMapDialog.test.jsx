@@ -81,4 +81,25 @@ describe('UploadMapDialog', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('800 px')
     expect(uploadGroupMap).not.toHaveBeenCalled()
   })
+
+  it('keeps the dialog open and shows the backend upload error', async () => {
+    uploadGroupMap.mockRejectedValueOnce(
+      new Error('Location đang được sử dụng bởi bản đồ khác.'),
+    )
+    const user = userEvent.setup()
+    render(<UploadMapDialog groups={groups} defaultGroupId={1} />)
+
+    await user.click(screen.getByRole('button', { name: 'Thêm bản đồ' }))
+    await user.type(screen.getByLabelText('Location gateway'), 'FLOOR_DUPLICATE')
+    await user.upload(
+      screen.getByLabelText('Chọn ảnh WebP'),
+      new File(['map'], 'floor.webp', { type: 'image/webp' }),
+    )
+    await user.click(screen.getByRole('button', { name: 'Tải ảnh lên' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Location đang được sử dụng',
+    )
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
 })

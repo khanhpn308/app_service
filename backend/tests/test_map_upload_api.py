@@ -90,6 +90,20 @@ def webp_bytes(width: int = 800, height: int = 320) -> bytes:
     )
     return output.getvalue()
 
+def animated_webp_bytes() -> bytes:
+    output = BytesIO()
+    first = Image.new("RGB", (800, 20), color="white")
+    second = Image.new("RGB", (800, 20), color="black")
+    first.save(
+        output,
+        format="WEBP",
+        save_all=True,
+        append_images=[second],
+        duration=100,
+        loop=0,
+    )
+    return output.getvalue()
+
 
 def upload(
     client: TestClient,
@@ -204,6 +218,37 @@ def test_upload_rejects_member_duplicate_and_invalid_files(api) -> None:
     assert wrong_width.status_code == 422
     assert wrong_type.status_code == 415
     assert too_large.status_code == 413
+
+def test_upload_rejects_disguised_and_animated_webp_at_api_boundary(api) -> None:
+    client, db, actor = api
+    owner = add_user(db, "owner-malicious-upload", 15)
+    group = add_group(db, owner)
+    db.commit()
+    actor["user"] = owner
+
+    png = BytesIO()
+    Image.new("RGB", (800, 20), color="white").save(png, format="PNG")
+
+    disguised = upload(
+        client,
+        group.group_id,
+        location="DISGUISED_PNG",
+        content=png.getvalue(),
+        filename="disguised.webp",
+        content_type="image/webp",
+    )
+    animated = upload(
+        client,
+        group.group_id,
+        location="ANIMATED_WEBP",
+        content=animated_webp_bytes(),
+    )
+
+    assert disguised.status_code == 422
+    assert disguised.json()["detail"] == "Nội dung file không phải ảnh WebP hợp lệ"
+    assert animated.status_code == 422
+    assert animated.json()["detail"] == "Không hỗ trợ ảnh WebP động"
+    assert db.query(LocationUsing).count() == 0
 
 
 def test_admin_upload_uses_group_owner_but_records_admin_as_creator(api) -> None:
