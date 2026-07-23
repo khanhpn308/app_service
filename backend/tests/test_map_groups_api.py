@@ -11,6 +11,7 @@ from app.api.map_groups_routes import router
 from app.core.deps import get_current_user, get_db
 from app.models.base import Base
 from app.models.map_group import MapGroup, MapGroupMembership
+from app.models.map_location import LocationUsing
 from app.models.user import User
 
 
@@ -186,3 +187,55 @@ def test_only_owner_or_admin_can_rename_group_without_idor_leak(api) -> None:
     )
     assert renamed.status_code == 200
     assert renamed.json()["name"] == "After"
+
+
+def test_owner_deletes_empty_group_but_member_cannot(api) -> None:
+    client, db, actor = api
+    owner = add_user(db, "owner", 1)
+    member = add_user(db, "member", 2)
+    group = add_group(db, owner, "Disposable")
+    db.add(
+        MapGroupMembership(
+            group_id=group.group_id,
+            user_id=member.user_id,
+            status="accepted",
+            invited_by_user_id=owner.user_id,
+        )
+    )
+    db.commit()
+
+    actor["user"] = member
+    assert client.delete(f"/api/map-groups/{group.group_id}").status_code == 404
+
+    actor["user"] = owner
+    assert client.delete(f"/api/map-groups/{group.group_id}").status_code == 204
+    assert db.get(MapGroup, group.group_id) is None
+
+
+def test_group_with_active_map_cannot_be_deleted_before_archive(api) -> None:
+    client, db, actor = api
+    owner = add_user(db, "owner", 1)
+    group = add_group(db, owner, "Protected")
+    db.flush()
+    db.add(
+        LocationUsing(
+            location="Floor_1",
+            image_data=b"webp",
+            mime_type="image/webp",
+            original_filename="floor.webp",
+            checksum_sha256="a" * 64,
+            file_size_bytes=4,
+            width=800,
+            height=100,
+            group_id=group.group_id,
+            owner_user_id=owner.user_id,
+            created_by_user_id=owner.user_id,
+        )
+    )
+    db.commit()
+    actor["user"] = owner
+
+    response = client.delete(f"/api/map-groups/{group.group_id}")
+
+    assert response.status_code == 409
+    assert db.get(MapGroup, group.group_id) is not None

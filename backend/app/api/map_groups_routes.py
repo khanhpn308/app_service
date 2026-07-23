@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, get_db
 from app.core.map_access import can_manage_group, can_view_group, is_user_active
 from app.models.map_group import MapGroup, MapGroupMembership
+from app.models.map_location import LocationUsing
 from app.models.user import User
 from app.schemas.map_groups import GroupCreate, GroupPatch, GroupPublic
 
@@ -175,3 +176,26 @@ def rename_group(
         raise HTTPException(status_code=409, detail="Tên nhóm đã tồn tại") from exc
     db.refresh(group)
     return _group_public(db, group, actor)
+
+
+@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_empty_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> None:
+    """Delete an empty managed group; map cascade belongs to Phase 4."""
+    group = _manageable_group_or_404(db, group_id, actor)
+    has_active_maps = (
+        db.query(LocationUsing.location_id)
+        .filter(LocationUsing.group_id == group.group_id)
+        .first()
+        is not None
+    )
+    if has_active_maps:
+        raise HTTPException(
+            status_code=409,
+            detail="Nhóm còn bản đồ đang sử dụng; cần archive trước khi xóa",
+        )
+    db.delete(group)
+    db.commit()
