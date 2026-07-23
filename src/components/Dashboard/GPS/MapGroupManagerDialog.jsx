@@ -147,7 +147,7 @@ function MapGroupManagerDialog({ onGroupsChanged }) {
 
   const handleDelete = async () => {
     const confirmed = window.confirm(
-      `Xóa nhóm “${selectedGroup.name}”? Nhóm chỉ có thể xóa khi chưa có map đang sử dụng.`,
+      `Xóa nhóm “${selectedGroup.name}”? Tất cả map đang sử dụng sẽ được chuyển vào lịch sử đã xóa.`,
     )
     if (!confirmed) return
 

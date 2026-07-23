@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MapGroupManagerDialog from './MapGroupManagerDialog';
 import {
   createMapGroup,
+  deleteMapGroup,
   inviteMapGroupMember,
   listMapGroupMembers,
   listMapGroups,
@@ -94,6 +95,7 @@ describe('MapGroupManagerDialog', () => {
       },
     ]);
     createMapGroup.mockResolvedValue(ownerGroup);
+    deleteMapGroup.mockResolvedValue(null);
     renameMapGroup.mockResolvedValue({ ...ownerGroup, name: 'Renamed' });
     inviteMapGroupMember.mockResolvedValue({});
     removeMapGroupMember.mockResolvedValue(null);
@@ -171,6 +173,23 @@ describe('MapGroupManagerDialog', () => {
     await waitFor(() => {
       expect(listMyMapGroupInvitations).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('warns that active maps will be archived before deleting a group', async () => {
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup();
+    render(<MapGroupManagerDialog />);
+    await user.click(screen.getByRole('button', { name: 'Quản lý nhóm' }));
+    await screen.findByText('Factory A');
+    await user.click(screen.getByRole('button', { name: /Quản lý Factory A/ }));
+    await screen.findByText('Member User');
+
+    await user.click(screen.getByRole('button', { name: 'Xóa nhóm' }));
+
+    expect(confirmation).toHaveBeenCalledWith(
+      'Xóa nhóm “Factory A”? Tất cả map đang sử dụng sẽ được chuyển vào lịch sử đã xóa.',
+    );
+    expect(deleteMapGroup).toHaveBeenCalledWith(1);
   });
 
   it('shows paginated deleted-map history only to admins', async () => {
