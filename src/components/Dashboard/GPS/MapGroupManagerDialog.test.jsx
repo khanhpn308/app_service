@@ -129,14 +129,16 @@ describe('MapGroupManagerDialog', () => {
   });
 
   it('creates a group and lets the owner rename, invite and remove members', async () => {
+    const onGroupsChanged = vi.fn();
     const user = userEvent.setup();
-    render(<MapGroupManagerDialog />);
+    render(<MapGroupManagerDialog onGroupsChanged={onGroupsChanged} />);
     await user.click(screen.getByRole('button', { name: 'Quản lý nhóm' }));
     await screen.findByText('Factory A');
 
     await user.type(screen.getByLabelText('Tên nhóm mới'), 'New Group');
     await user.click(screen.getByRole('button', { name: 'Tạo nhóm' }));
     expect(createMapGroup).toHaveBeenCalledWith({ name: 'New Group' });
+    expect(onGroupsChanged).toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: /Quản lý Factory A/ }));
     expect(await screen.findByText('Member User')).toBeTruthy();

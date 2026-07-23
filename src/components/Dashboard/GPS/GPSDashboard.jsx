@@ -267,7 +267,7 @@ const GPSDashboard = ({ initialDevices = [] }) => {
             Xóa bản đồ
           </Button>
         )}
-        <MapGroupManagerDialog />
+        <MapGroupManagerDialog onGroupsChanged={loadGroups} />
       </div>
 
       {error && (

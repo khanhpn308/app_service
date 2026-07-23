@@ -28,7 +28,7 @@ import GroupListPanel from './GroupListPanel'
 import InvitationPanel from './InvitationPanel'
 import DeletedMapsPanel from './DeletedMapsPanel'
 
-function MapGroupManagerDialog() {
+function MapGroupManagerDialog({ onGroupsChanged }) {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('groups')
@@ -88,6 +88,7 @@ function MapGroupManagerDialog() {
     try {
       await createMapGroup(payload)
       await loadOverview()
+      await onGroupsChanged?.()
     } catch (requestError) {
       setError(requestError.message || 'Không thể tạo nhóm.')
     } finally {
@@ -157,6 +158,7 @@ function MapGroupManagerDialog() {
       setSelectedGroup(null)
       setMembers([])
       await loadOverview()
+      await onGroupsChanged?.()
     } catch (requestError) {
       setError(requestError.message || 'Không thể xóa nhóm.')
     } finally {
@@ -172,6 +174,7 @@ function MapGroupManagerDialog() {
       setInvitations(await listMyMapGroupInvitations())
       if (status === 'accepted') {
         setGroups(await listMapGroups())
+        await onGroupsChanged?.()
       }
     } catch (requestError) {
       setError(requestError.message || 'Không thể cập nhật lời mời.')
