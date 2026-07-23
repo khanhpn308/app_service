@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import GPSDashboard from '../components/Dashboard/GPS/GPSDashboard';
+import { useAuth } from '../contexts/AuthContext';
 import { apiFetch } from '../lib/api';
 import { openWebSocket } from '../lib/wsUrl';
 import { mergeDeviceCatalog, mergeGpsMessage } from './gpsRealtime';
@@ -10,6 +11,7 @@ function resolveWsBase() {
 }
 
 const GPSPage = () => {
+  const { isAdmin } = useAuth();
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const wsRef = useRef(null);
@@ -20,7 +22,9 @@ const GPSPage = () => {
 
     const fetchDeviceCatalog = async () => {
       try {
-        const deviceList = await apiFetch('/api/devices');
+        const deviceList = await apiFetch(
+          isAdmin() ? '/api/devices' : '/api/devices/my',
+        );
         if (!mounted) return;
         setDevices((liveDevices) => mergeDeviceCatalog(liveDevices, deviceList || []));
       } catch (error) {
@@ -34,7 +38,7 @@ const GPSPage = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     let closedByEffect = false;
