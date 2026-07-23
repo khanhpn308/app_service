@@ -14,6 +14,7 @@ from .health import router as health_router
 from .floorplans_routes import router as floorplans_router
 from .locations_routes import router as locations_router
 from .map_groups_routes import router as map_groups_router
+from .map_routes import router as map_router
 from .mqtt_routes import router as mqtt_router
 from .users_routes import router as users_router
 from .websocket_routes import router as websocket_router
@@ -28,4 +29,5 @@ api_router.include_router(users_router)
 api_router.include_router(locations_router)
 api_router.include_router(floorplans_router)
 api_router.include_router(map_groups_router)
+api_router.include_router(map_router)
 api_router.include_router(websocket_router)
