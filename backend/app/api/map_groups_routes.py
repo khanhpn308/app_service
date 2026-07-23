@@ -1,23 +1,55 @@
 """REST endpoints for map groups and invitation membership."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi.util import get_remote_address
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.core.map_access import can_manage_group, can_view_group, is_user_active
+from app.core.rate_limit import limiter
+from app.core.security import decode_token
 from app.models.map_group import MapGroup, MapGroupMembership
 from app.models.map_location import LocationUsing
 from app.models.user import User
-from app.schemas.map_groups import GroupCreate, GroupPatch, GroupPublic
+from app.schemas.map_groups import (
+    GroupCreate,
+    GroupPatch,
+    GroupPublic,
+    InvitationCreate,
+    InvitationPatch,
+    InvitationPublic,
+    MembershipPublic,
+)
 
 
-router = APIRouter(prefix="/map-groups", tags=["map-groups"])
+router = APIRouter(tags=["map-groups"])
+group_router = APIRouter(prefix="/map-groups")
+invitation_router = APIRouter(prefix="/map-group-invitations")
 
 
 def _is_admin(user: User) -> bool:
     return user.role == "admin"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _invite_rate_key(request: Request) -> str:
+    authorization = request.headers.get("authorization", "")
+    if authorization.lower().startswith("bearer "):
+        try:
+            payload = decode_token(authorization[7:].strip())
+            identity = payload.get("uid") or payload.get("sub")
+            if identity is not None:
+                return f"map-invite-user:{identity}"
+        except Exception:
+            pass
+    return f"map-invite-ip:{get_remote_address(request)}"
 
 
 def _owner_or_404(db: Session, group: MapGroup) -> User:
@@ -79,7 +111,7 @@ def _duplicate_name(
     return query.first() is not None
 
 
-@router.get("", response_model=list[GroupPublic])
+@group_router.get("", response_model=list[GroupPublic])
 def list_groups(
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
@@ -112,7 +144,7 @@ def list_groups(
     return [_group_public(db, group, actor) for group in groups]
 
 
-@router.post("", response_model=GroupPublic, status_code=status.HTTP_201_CREATED)
+@group_router.post("", response_model=GroupPublic, status_code=status.HTTP_201_CREATED)
 def create_group(
     body: GroupCreate,
     db: Session = Depends(get_db),
@@ -152,7 +184,7 @@ def create_group(
     return _group_public(db, group, actor)
 
 
-@router.patch("/{group_id}", response_model=GroupPublic)
+@group_router.patch("/{group_id}", response_model=GroupPublic)
 def rename_group(
     group_id: int,
     body: GroupPatch,
@@ -178,7 +210,7 @@ def rename_group(
     return _group_public(db, group, actor)
 
 
-@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+@group_router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_empty_group(
     group_id: int,
     db: Session = Depends(get_db),
@@ -199,3 +231,180 @@ def delete_empty_group(
         )
     db.delete(group)
     db.commit()
+
+
+def _membership_public(
+    db: Session,
+    membership: MapGroupMembership,
+) -> MembershipPublic:
+    user = db.get(User, membership.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy thành viên")
+    return MembershipPublic(
+        group_id=membership.group_id,
+        user_id=membership.user_id,
+        username=user.username,
+        fullname=user.fullname,
+        status=membership.status,
+        invited_by_user_id=membership.invited_by_user_id,
+        invited_at=membership.invited_at,
+        responded_at=membership.responded_at,
+    )
+
+
+@group_router.get("/{group_id}/members", response_model=list[MembershipPublic])
+def list_group_members(
+    group_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> list[MembershipPublic]:
+    """List invitation and membership states for group managers."""
+    group = _manageable_group_or_404(db, group_id, actor)
+    memberships = (
+        db.query(MapGroupMembership)
+        .filter(MapGroupMembership.group_id == group.group_id)
+        .order_by(MapGroupMembership.invited_at.asc(), MapGroupMembership.user_id.asc())
+        .all()
+    )
+    return [_membership_public(db, membership) for membership in memberships]
+
+
+@group_router.post(
+    "/{group_id}/invitations",
+    response_model=MembershipPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("100/hour", key_func=_invite_rate_key)
+def invite_group_member(
+    request: Request,
+    group_id: int,
+    body: InvitationCreate,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> MembershipPublic:
+    """Invite an exact active username or re-open a rejected invitation."""
+    group = _manageable_group_or_404(db, group_id, actor)
+    target = db.query(User).filter(User.username == body.username).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
+    if target.user_id in {group.owner_user_id, actor.user_id}:
+        raise HTTPException(status_code=409, detail="Không thể tự mời vào nhóm")
+    if not is_user_active(target):
+        raise HTTPException(status_code=409, detail="Tài khoản được mời không còn hiệu lực")
+
+    membership = db.get(
+        MapGroupMembership,
+        (group.group_id, target.user_id),
+    )
+    if membership is not None and membership.status != "rejected":
+        raise HTTPException(status_code=409, detail="Lời mời hoặc thành viên đã tồn tại")
+
+    invited_at = _utcnow()
+    if membership is None:
+        membership = MapGroupMembership(
+            group_id=group.group_id,
+            user_id=target.user_id,
+            status="pending",
+            invited_by_user_id=actor.user_id,
+            invited_at=invited_at,
+        )
+        db.add(membership)
+    else:
+        membership.status = "pending"
+        membership.invited_by_user_id = actor.user_id
+        membership.invited_at = invited_at
+        membership.responded_at = None
+    db.commit()
+    db.refresh(membership)
+    return _membership_public(db, membership)
+
+
+@group_router.delete(
+    "/{group_id}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_group_member(
+    group_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> None:
+    """Let only a group manager cancel or remove a membership."""
+    group = _manageable_group_or_404(db, group_id, actor)
+    membership = db.get(MapGroupMembership, (group.group_id, user_id))
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy thành viên")
+    db.delete(membership)
+    db.commit()
+
+
+def _invitation_public(
+    db: Session,
+    membership: MapGroupMembership,
+) -> InvitationPublic:
+    group = db.get(MapGroup, membership.group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy nhóm")
+    owner = _owner_or_404(db, group)
+    return InvitationPublic(
+        group_id=group.group_id,
+        group_name=group.name,
+        owner_username=owner.username,
+        status=membership.status,
+        invited_at=membership.invited_at,
+        responded_at=membership.responded_at,
+    )
+
+
+@invitation_router.get("", response_model=list[InvitationPublic])
+def list_my_pending_invitations(
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> list[InvitationPublic]:
+    """List pending invitations for the authenticated active user."""
+    if not is_user_active(actor):
+        raise HTTPException(status_code=403, detail="Tài khoản không còn hiệu lực")
+    memberships = (
+        db.query(MapGroupMembership)
+        .filter(
+            MapGroupMembership.user_id == actor.user_id,
+            MapGroupMembership.status == "pending",
+        )
+        .order_by(MapGroupMembership.invited_at.asc())
+        .all()
+    )
+    return [_invitation_public(db, membership) for membership in memberships]
+
+
+@invitation_router.patch("/{group_id}", response_model=InvitationPublic)
+def respond_to_invitation(
+    group_id: int,
+    body: InvitationPatch,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> InvitationPublic:
+    """Accept or reject the actor's own pending invitation."""
+    if not is_user_active(actor):
+        raise HTTPException(status_code=403, detail="Tài khoản không còn hiệu lực")
+    membership = db.get(MapGroupMembership, (group_id, actor.user_id))
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lời mời")
+    if membership.status != "pending":
+        raise HTTPException(status_code=409, detail="Lời mời đã được phản hồi")
+
+    group = db.get(MapGroup, group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy nhóm")
+    owner = _owner_or_404(db, group)
+    if body.status == "accepted" and not is_user_active(owner):
+        raise HTTPException(status_code=409, detail="Owner của nhóm không còn hiệu lực")
+
+    membership.status = body.status
+    membership.responded_at = _utcnow()
+    db.commit()
+    db.refresh(membership)
+    return _invitation_public(db, membership)
+
+
+router.include_router(group_router)
+router.include_router(invitation_router)
