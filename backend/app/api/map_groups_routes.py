@@ -32,7 +32,7 @@ invitation_router = APIRouter(prefix="/map-group-invitations")
 
 
 def _is_admin(user: User) -> bool:
-    return user.role == "admin"
+    return (user.role or "").lower() == "admin"
 
 
 def _utcnow() -> datetime:
@@ -57,6 +57,11 @@ def _owner_or_404(db: Session, group: MapGroup) -> User:
     if owner is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy chủ sở hữu nhóm")
     return owner
+
+def _user_by_exact_username(db: Session, username: str) -> User | None:
+    """Preserve exact username semantics even on case-insensitive MySQL collations."""
+    user = db.query(User).filter(User.username == username).first()
+    return user if user is not None and user.username == username else None
 
 
 def _group_public(
@@ -153,7 +158,7 @@ def create_group(
     """Create a group for self, or for an exact owner username as admin."""
     if _is_admin(actor):
         owner = (
-            db.query(User).filter(User.username == body.owner_username).first()
+            _user_by_exact_username(db, body.owner_username)
             if body.owner_username
             else actor
         )
@@ -284,7 +289,7 @@ def invite_group_member(
 ) -> MembershipPublic:
     """Invite an exact active username or re-open a rejected invitation."""
     group = _manageable_group_or_404(db, group_id, actor)
-    target = db.query(User).filter(User.username == body.username).first()
+    target = _user_by_exact_username(db, body.username)
     if target is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
     if target.user_id in {group.owner_user_id, actor.user_id}:
@@ -314,7 +319,14 @@ def invite_group_member(
         membership.invited_by_user_id = actor.user_id
         membership.invited_at = invited_at
         membership.responded_at = None
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Lời mời hoặc thành viên đã tồn tại",
+        ) from exc
     db.refresh(membership)
     return _membership_public(db, membership)
 
