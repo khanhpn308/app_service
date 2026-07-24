@@ -5,3 +5,8 @@ dist
 *.log
 coverage
 
+# Local Vite overrides are for `npm run dev` only. Production uses the
+# same-origin Nginx `/api` and WebSocket proxies.
+.env.local
+.env.*.local
+
