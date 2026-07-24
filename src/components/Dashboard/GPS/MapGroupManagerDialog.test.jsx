@@ -130,6 +130,16 @@ describe('MapGroupManagerDialog', () => {
     expect(screen.getByRole('button', { name: /Lời mời \(1\)/ })).toBeTruthy();
   });
 
+  it('renders the new group name with dark text on its white background', async () => {
+    const user = userEvent.setup();
+    render(<MapGroupManagerDialog />);
+
+    await user.click(screen.getByRole('button', { name: 'Quản lý nhóm' }));
+
+    const nameInput = await screen.findByLabelText('Tên nhóm mới');
+    expect(nameInput.className.split(/\s+/)).toContain('text-gray-900');
+  });
+
   it('creates a group and lets the owner rename, invite and remove members', async () => {
     const onGroupsChanged = vi.fn();
     const user = userEvent.setup();
