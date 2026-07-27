@@ -82,7 +82,7 @@ function UploadMapDialog({ groups, defaultGroupId, onUploaded }) {
       return
     }
     if (!file) {
-      setError('Vui lòng chọn ảnh WebP hợp lệ.')
+      setError('Vui lòng chọn ảnh WebP, PNG hoặc JPG hợp lệ.')
       return
     }
 
@@ -173,14 +173,14 @@ function UploadMapDialog({ groups, defaultGroupId, onUploaded }) {
               Kéo thả ảnh vào đây hoặc chọn từ máy
             </span>
             <span className="text-xs text-slate-500">
-              WebP tĩnh · 800×1–8000 px · tối đa 5 MB
+              WebP, PNG hoặc JPG tĩnh · mọi kích thước · dưới 10 MB
             </span>
             <input
               id="upload-map-file"
               type="file"
-              accept=".webp,image/webp"
+              accept=".webp,.png,.jpg,.jpeg,image/webp,image/png,image/jpeg"
               className="sr-only"
-              aria-label="Chọn ảnh WebP"
+              aria-label="Chọn ảnh bản đồ"
               onChange={(event) => acceptFile(event.target.files?.[0])}
             />
           </label>

@@ -30,6 +30,7 @@ from app.core.db_migrate import (
     ensure_device_topic_column,
     ensure_device_ui_columns,
     ensure_device_user_device_asignment_id_column,
+    ensure_map_image_constraints,
     ensure_schema_hardening,
     ensure_user_cccd_varchar,
     ensure_user_expired_at_column,
@@ -86,6 +87,7 @@ async def lifespan(app: FastAPI):
     ensure_device_authorization_granted_by_varchar(engine)
     ensure_user_cccd_varchar(engine)
     ensure_schema_hardening(engine)
+    ensure_map_image_constraints(engine)
 
     """Sau khi schema đã sẵn sàng, dùng session ORM để seed dữ liệu mặc định và xử lý user hết hạn.
     thao tác với database bằng python class model -> sử dụng session ORM.

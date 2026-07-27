@@ -1,4 +1,4 @@
-"""SQLAlchemy models for active and archived WebP floorplans."""
+"""SQLAlchemy models for active and archived map images."""
 
 from datetime import datetime
 
@@ -29,12 +29,10 @@ class LocationUsing(Base):
     __tablename__ = "locations_using"
     __table_args__ = (
         UniqueConstraint("location", name="uq_locations_using_location"),
-        CheckConstraint("width = 800", name="ck_locations_using_width"),
+        CheckConstraint("width >= 1", name="ck_locations_using_width"),
+        CheckConstraint("height >= 1", name="ck_locations_using_height"),
         CheckConstraint(
-            "height BETWEEN 1 AND 8000", name="ck_locations_using_height"
-        ),
-        CheckConstraint(
-            "file_size_bytes BETWEEN 1 AND 5242880",
+            "file_size_bytes >= 1 AND file_size_bytes < 10485760",
             name="ck_locations_using_file_size",
         ),
         Index("idx_locations_using_group", "group_id"),
@@ -81,9 +79,11 @@ class LocationDeleted(Base):
 
     __tablename__ = "locations_deleted"
     __table_args__ = (
-        CheckConstraint("width = 800", name="ck_locations_deleted_width"),
+        CheckConstraint("width >= 1", name="ck_locations_deleted_width"),
+        CheckConstraint("height >= 1", name="ck_locations_deleted_height"),
         CheckConstraint(
-            "height BETWEEN 1 AND 8000", name="ck_locations_deleted_height"
+            "file_size_bytes >= 1 AND file_size_bytes < 10485760",
+            name="ck_locations_deleted_file_size",
         ),
         CheckConstraint(
             "delete_reason IN ('map_deleted', 'group_deleted', 'owner_deleted')",

@@ -1,4 +1,11 @@
-export const MAX_MAP_FILE_BYTES = 5 * 1024 * 1024
+export const MAX_MAP_FILE_BYTES = 10 * 1024 * 1024
+
+const EXTENSION_TO_MIME_TYPE = {
+  webp: 'image/webp',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+}
 
 async function decodeImageDimensions(file) {
   if (typeof createImageBitmap === 'function') {
@@ -14,7 +21,7 @@ async function decodeImageDimensions(file) {
       const image = new Image()
       image.onload = () =>
         resolve({ width: image.naturalWidth, height: image.naturalHeight })
-      image.onerror = () => reject(new Error('Không thể đọc kích thước ảnh WebP.'))
+      image.onerror = () => reject(new Error('Không thể đọc nội dung ảnh.'))
       image.src = objectUrl
     })
   } finally {
@@ -24,24 +31,26 @@ async function decodeImageDimensions(file) {
 
 export async function validateMapFile(file, decode = decodeImageDimensions) {
   if (!file) {
-    throw new Error('Vui lòng chọn ảnh WebP.')
+    throw new Error('Vui lòng chọn ảnh WebP, PNG hoặc JPG.')
   }
-  if (
-    file.type !== 'image/webp' ||
-    !String(file.name || '').toLowerCase().endsWith('.webp')
-  ) {
-    throw new Error('Ảnh phải đúng định dạng WebP.')
+
+  const filename = String(file.name || '').toLowerCase()
+  const extension = filename.includes('.') ? filename.split('.').pop() : ''
+  const expectedMimeType = EXTENSION_TO_MIME_TYPE[extension]
+  const supportedMimeTypes = Object.values(EXTENSION_TO_MIME_TYPE)
+  if (!expectedMimeType || !supportedMimeTypes.includes(file.type)) {
+    throw new Error('Ảnh phải đúng định dạng WebP, PNG hoặc JPG.')
   }
-  if (file.size < 1 || file.size > MAX_MAP_FILE_BYTES) {
-    throw new Error('Ảnh phải có dung lượng từ 1 byte đến tối đa 5 MB.')
+  if (file.type !== expectedMimeType) {
+    throw new Error('Đuôi file và định dạng ảnh phải khớp nhau.')
+  }
+  if (file.size < 1 || file.size >= MAX_MAP_FILE_BYTES) {
+    throw new Error('Ảnh phải có dung lượng từ 1 byte và nhỏ hơn 10 MB.')
   }
 
   const dimensions = await decode(file)
-  if (dimensions.width !== 800) {
-    throw new Error('Chiều rộng ảnh phải đúng 800 px.')
-  }
-  if (dimensions.height < 1 || dimensions.height > 8000) {
-    throw new Error('Ảnh phải có chiều cao từ 1 đến 8000 px.')
+  if (dimensions.width < 1 || dimensions.height < 1) {
+    throw new Error('Không thể đọc kích thước ảnh hợp lệ.')
   }
   return dimensions
 }

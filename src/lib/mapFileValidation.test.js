@@ -2,40 +2,47 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { MAX_MAP_FILE_BYTES, validateMapFile } from './mapFileValidation'
 
-const webp = (overrides = {}) =>
-  new File(['map'], 'floor.webp', {
-    type: 'image/webp',
-    ...overrides,
-  })
+const imageFile = (name, type, content = ['map']) =>
+  new File(content, name, { type })
 
 describe('validateMapFile', () => {
-  it('accepts a WebP whose decoded width is exactly 800 px', async () => {
-    const decode = vi.fn().mockResolvedValue({ width: 800, height: 1200 })
+  it.each([
+    ['floor.webp', 'image/webp'],
+    ['floor.png', 'image/png'],
+    ['floor.jpg', 'image/jpeg'],
+    ['floor.jpeg', 'image/jpeg'],
+  ])('accepts supported static image metadata: %s', async (name, type) => {
+    const decode = vi.fn().mockResolvedValue({ width: 1234, height: 9001 })
+    const file = imageFile(name, type)
 
-    await expect(validateMapFile(webp(), decode)).resolves.toEqual({
-      width: 800,
-      height: 1200,
+    await expect(validateMapFile(file, decode)).resolves.toEqual({
+      width: 1234,
+      height: 9001,
     })
+    expect(decode).toHaveBeenCalledWith(file)
   })
 
   it.each([
-    [new File(['map'], 'floor.png', { type: 'image/png' }), 'WebP'],
+    [imageFile('floor.gif', 'image/gif'), 'WebP, PNG hoặc JPG'],
+    [imageFile('floor.webp', 'image/png'), 'khớp'],
     [
-      new File([new Uint8Array(MAX_MAP_FILE_BYTES + 1)], 'floor.webp', {
-        type: 'image/webp',
-      }),
-      '5 MB',
+      imageFile(
+        'floor.png',
+        'image/png',
+        [new Uint8Array(MAX_MAP_FILE_BYTES)],
+      ),
+      '10 MB',
     ],
   ])('rejects invalid file metadata', async (file, message) => {
     await expect(validateMapFile(file, vi.fn())).rejects.toThrow(message)
   })
 
-  it.each([
-    [{ width: 799, height: 600 }, '800'],
-    [{ width: 800, height: 8001 }, 'chiều cao'],
-  ])('rejects invalid decoded dimensions', async (dimensions, message) => {
+  it('does not impose a width or height limit', async () => {
     await expect(
-      validateMapFile(webp(), vi.fn().mockResolvedValue(dimensions)),
-    ).rejects.toThrow(message)
+      validateMapFile(
+        imageFile('floor.png', 'image/png'),
+        vi.fn().mockResolvedValue({ width: 1, height: 25000 }),
+      ),
+    ).resolves.toEqual({ width: 1, height: 25000 })
   })
 })

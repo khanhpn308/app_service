@@ -298,3 +298,65 @@ def ensure_schema_hardening(engine: Engine) -> None:
         logger.info("db_migrate: ensure_schema_hardening OK")
     except Exception:
         logger.warning("db_migrate: ensure_schema_hardening gặp lỗi (bỏ qua, không sập app)", exc_info=True)
+
+
+def ensure_map_image_constraints(engine: Engine) -> None:
+    """Replace legacy 800px/5 MiB checks on existing MySQL volumes."""
+    if engine.dialect.name != "mysql":
+        return
+
+    desired_constraints = {
+        ("locations_using", "ck_locations_using_width"): "width >= 1",
+        ("locations_using", "ck_locations_using_height"): "height >= 1",
+        (
+            "locations_using",
+            "ck_locations_using_file_size",
+        ): "file_size_bytes >= 1 AND file_size_bytes < 10485760",
+        ("locations_deleted", "ck_locations_deleted_width"): "width >= 1",
+        ("locations_deleted", "ck_locations_deleted_height"): "height >= 1",
+        (
+            "locations_deleted",
+            "ck_locations_deleted_file_size",
+        ): "file_size_bytes >= 1 AND file_size_bytes < 10485760",
+    }
+
+    def normalize(clause: str) -> str:
+        return (
+            str(clause or "")
+            .lower()
+            .replace("`", "")
+            .replace("(", "")
+            .replace(")", "")
+            .replace(" ", "")
+            .replace("\n", "")
+            .replace("\t", "")
+        )
+
+    with engine.begin() as conn:
+        for (table, constraint), desired_clause in desired_constraints.items():
+            current_clause = conn.execute(
+                text(
+                    """
+                    SELECT CHECK_CLAUSE
+                    FROM information_schema.CHECK_CONSTRAINTS
+                    WHERE CONSTRAINT_SCHEMA = DATABASE()
+                      AND CONSTRAINT_NAME = :constraint
+                    """
+                ),
+                {"constraint": constraint},
+            ).scalar()
+            if normalize(current_clause) == normalize(desired_clause):
+                continue
+            if current_clause is not None:
+                conn.execute(
+                    text(
+                        f"ALTER TABLE `{table}` DROP CHECK `{constraint}`"
+                    )
+                )
+            conn.execute(
+                text(
+                    f"ALTER TABLE `{table}` ADD CONSTRAINT `{constraint}` "
+                    f"CHECK ({desired_clause})"
+                )
+            )
+    logger.info("db_migrate: ensure_map_image_constraints OK")

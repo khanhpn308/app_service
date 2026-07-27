@@ -28,11 +28,10 @@ from app.core.map_archive import (
 )
 from app.core.rate_limit import limiter
 from app.core.security import decode_token
-from app.core.webp_validator import (
-    MAX_WEBP_BYTES,
-    WEBP_MIME_TYPE,
-    WebPValidationError,
-    validate_webp,
+from app.core.map_image_validator import (
+    MAX_MAP_IMAGE_BYTES,
+    MapImageValidationError,
+    validate_map_image,
 )
 from app.models.map_group import MapGroup
 from app.models.map_location import LocationDeleted, LocationUsing
@@ -98,27 +97,26 @@ def _safe_filename(value: str | None) -> str:
     return filename
 
 
-def _validation_http_error(error: WebPValidationError) -> HTTPException:
+def _validation_http_error(error: MapImageValidationError) -> HTTPException:
     if error.code == "file_too_large":
         return HTTPException(
             status_code=413,
-            detail="Ảnh WebP không được vượt quá 5 MB",
+            detail="Ảnh phải nhỏ hơn 10 MB",
         )
     if error.code == "unsupported_media_type":
         return HTTPException(
             status_code=415,
-            detail="Chỉ chấp nhận file WebP",
+            detail="Chỉ chấp nhận ảnh WebP, PNG hoặc JPG",
         )
     messages = {
         "empty_file": "File ảnh đang rỗng",
-        "invalid_width": "Chiều rộng ảnh phải đúng 800 pixel",
-        "invalid_height": "Chiều cao ảnh phải từ 1 đến 8000 pixel",
-        "animated_webp": "Không hỗ trợ ảnh WebP động",
-        "invalid_webp": "Nội dung file không phải ảnh WebP hợp lệ",
+        "animated_image": "Không hỗ trợ ảnh động",
+        "format_mismatch": "Định dạng nội dung ảnh không khớp tên file hoặc MIME",
+        "invalid_image": "Nội dung file không phải ảnh hợp lệ",
     }
     return HTTPException(
         status_code=422,
-        detail=messages.get(error.code, "Ảnh WebP không hợp lệ"),
+        detail=messages.get(error.code, "Ảnh không hợp lệ"),
     )
 
 
@@ -197,21 +195,21 @@ async def upload_group_map(
         raise HTTPException(status_code=409, detail="Location đang được sử dụng")
 
     filename = _safe_filename(file.filename)
-    content = await file.read(MAX_WEBP_BYTES + 1)
+    content = await file.read(MAX_MAP_IMAGE_BYTES + 1)
     await file.close()
     try:
-        metadata = validate_webp(
+        metadata = validate_map_image(
             content,
             filename=filename,
             content_type=file.content_type,
         )
-    except WebPValidationError as error:
+    except MapImageValidationError as error:
         raise _validation_http_error(error) from error
 
     active = LocationUsing(
         location=normalized_location,
         image_data=content,
-        mime_type=WEBP_MIME_TYPE,
+        mime_type=metadata.mime_type,
         original_filename=filename,
         checksum_sha256=metadata.checksum_sha256,
         file_size_bytes=metadata.file_size_bytes,

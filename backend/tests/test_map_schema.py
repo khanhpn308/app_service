@@ -88,7 +88,7 @@ def test_group_name_is_unique_per_owner_and_membership_status_is_constrained() -
     assert "status IN ('pending', 'accepted', 'rejected')" in membership_checks
 
 
-def test_active_locations_use_mediumblob_and_enforce_active_invariants() -> None:
+def test_active_locations_use_mediumblob_and_enforce_image_invariants() -> None:
     table = Base.metadata.tables["locations_using"]
     mysql_ddl = str(CreateTable(table).compile(dialect=mysql.dialect()))
     unique_columns = {
@@ -104,15 +104,23 @@ def test_active_locations_use_mediumblob_and_enforce_active_invariants() -> None
 
     assert "MEDIUMBLOB" in mysql_ddl
     assert ("location",) in unique_columns
-    assert "width = 800" in check_sql
-    assert "height BETWEEN 1 AND 8000" in check_sql
-    assert "file_size_bytes BETWEEN 1 AND 5242880" in check_sql
+    assert "width >= 1" in check_sql
+    assert "height >= 1" in check_sql
+    assert "file_size_bytes >= 1 AND file_size_bytes < 10485760" in check_sql
 
 
 def test_deleted_locations_are_an_fk_free_archive_without_status_column() -> None:
     table = Base.metadata.tables["locations_deleted"]
     mysql_ddl = str(CreateTable(table).compile(dialect=mysql.dialect()))
+    check_sql = {
+        str(constraint.sqltext)
+        for constraint in table.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
 
     assert "MEDIUMBLOB" in mysql_ddl
     assert "status" not in table.columns
     assert not table.foreign_keys
+    assert "width >= 1" in check_sql
+    assert "height >= 1" in check_sql
+    assert "file_size_bytes >= 1 AND file_size_bytes < 10485760" in check_sql

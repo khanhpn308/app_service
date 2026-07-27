@@ -21,7 +21,9 @@ const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, g
         <div className="text-center p-6">
           <div className="text-4xl mb-2">🖼️</div>
           <p className="text-gray-700 font-bold">Không tìm thấy ảnh mặt bằng</p>
-          <p className="text-gray-400 text-xs mt-1">Kiểm tra file {locationName}.webp trong thư mục floorplans</p>
+          <p className="text-gray-400 text-xs mt-1">
+            Kiểm tra quyền truy cập hoặc thử tải lại ảnh của {locationName}
+          </p>
         </div>
       </div>
     );

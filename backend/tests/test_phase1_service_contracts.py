@@ -2,10 +2,10 @@ import importlib.util
 
 
 EXPECTED_SYMBOLS = {
-    "app.core.webp_validator": {
-        "WebPMetadata",
-        "WebPValidationError",
-        "validate_webp",
+    "app.core.map_image_validator": {
+        "MapImageMetadata",
+        "MapImageValidationError",
+        "validate_map_image",
     },
     "app.core.map_access": {
         "is_user_active",

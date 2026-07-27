@@ -34,7 +34,7 @@ describe('UploadMapDialog', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   })
 
-  it('uploads a validated WebP into a group the user can manage', async () => {
+  it('uploads a validated map image into a group the user can manage', async () => {
     const onUploaded = vi.fn()
     const user = userEvent.setup()
     render(
@@ -46,12 +46,14 @@ describe('UploadMapDialog', () => {
     )
 
     await user.click(screen.getByRole('button', { name: 'Thêm bản đồ' }))
-    expect(screen.getByText('WebP tĩnh · 800×1–8000 px · tối đa 5 MB')).toBeTruthy()
+    expect(
+      screen.getByText('WebP, PNG hoặc JPG tĩnh · mọi kích thước · dưới 10 MB'),
+    ).toBeTruthy()
     expect(screen.queryByRole('option', { name: 'Được chia sẻ' })).toBeNull()
 
     await user.type(screen.getByLabelText('Location gateway'), ' FLOOR_1 ')
-    const file = new File(['map'], 'floor.webp', { type: 'image/webp' })
-    await user.upload(screen.getByLabelText('Chọn ảnh WebP'), file)
+    const file = new File(['map'], 'floor.png', { type: 'image/png' })
+    await user.upload(screen.getByLabelText('Chọn ảnh bản đồ'), file)
     await user.click(screen.getByRole('button', { name: 'Tải ảnh lên' }))
 
     await waitFor(() => {
@@ -67,18 +69,18 @@ describe('UploadMapDialog', () => {
   })
 
   it('shows client validation failures without sending a request', async () => {
-    validateMapFile.mockRejectedValueOnce(new Error('Chiều rộng ảnh phải đúng 800 px.'))
+    validateMapFile.mockRejectedValueOnce(new Error('Ảnh phải nhỏ hơn 10 MB.'))
     const user = userEvent.setup()
     render(<UploadMapDialog groups={groups} defaultGroupId={1} />)
 
     await user.click(screen.getByRole('button', { name: 'Thêm bản đồ' }))
     await user.type(screen.getByLabelText('Location gateway'), 'FLOOR_2')
     await user.upload(
-      screen.getByLabelText('Chọn ảnh WebP'),
-      new File(['map'], 'floor.webp', { type: 'image/webp' }),
+      screen.getByLabelText('Chọn ảnh bản đồ'),
+      new File(['map'], 'floor.jpg', { type: 'image/jpeg' }),
     )
 
-    expect((await screen.findByRole('alert')).textContent).toContain('800 px')
+    expect((await screen.findByRole('alert')).textContent).toContain('10 MB')
     expect(uploadGroupMap).not.toHaveBeenCalled()
   })
 
@@ -92,7 +94,7 @@ describe('UploadMapDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Thêm bản đồ' }))
     await user.type(screen.getByLabelText('Location gateway'), 'FLOOR_DUPLICATE')
     await user.upload(
-      screen.getByLabelText('Chọn ảnh WebP'),
+      screen.getByLabelText('Chọn ảnh bản đồ'),
       new File(['map'], 'floor.webp', { type: 'image/webp' }),
     )
     await user.click(screen.getByRole('button', { name: 'Tải ảnh lên' }))

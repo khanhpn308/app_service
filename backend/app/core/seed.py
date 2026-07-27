@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
-from app.core.webp_validator import WEBP_MIME_TYPE, validate_webp
+from app.core.map_image_validator import validate_map_image
 from app.models.device import Device
 from app.models.map_group import MapGroup
 from app.models.map_location import LocationDeleted, LocationUsing
@@ -146,16 +146,16 @@ def ensure_default_maps(
             continue
 
         content = (source_dir / filename).read_bytes()
-        metadata = validate_webp(
+        metadata = validate_map_image(
             content,
             filename=filename,
-            content_type=WEBP_MIME_TYPE,
+            content_type="image/webp",
         )
         db.add(
             LocationUsing(
                 location=location,
                 image_data=content,
-                mime_type=WEBP_MIME_TYPE,
+                mime_type=metadata.mime_type,
                 original_filename=filename,
                 checksum_sha256=metadata.checksum_sha256,
                 file_size_bytes=metadata.file_size_bytes,

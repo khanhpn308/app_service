@@ -105,6 +105,20 @@ def animated_webp_bytes() -> bytes:
     return output.getvalue()
 
 
+def image_bytes(
+    image_format: str,
+    *,
+    width: int,
+    height: int,
+) -> bytes:
+    output = BytesIO()
+    Image.new("RGB", (width, height), color=(240, 240, 240)).save(
+        output,
+        format=image_format,
+    )
+    return output.getvalue()
+
+
 def upload(
     client: TestClient,
     group_id: int,
@@ -123,31 +137,53 @@ def upload(
     )
 
 
-def test_owner_uploads_valid_webp_and_lists_metadata_without_blob(api) -> None:
+@pytest.mark.parametrize(
+    ("image_format", "filename", "content_type"),
+    [
+        ("WEBP", "floor.webp", "image/webp"),
+        ("PNG", "floor.png", "image/png"),
+        ("JPEG", "floor.jpg", "image/jpeg"),
+    ],
+)
+def test_owner_uploads_supported_image_and_lists_metadata_without_blob(
+    api,
+    image_format: str,
+    filename: str,
+    content_type: str,
+) -> None:
     client, db, actor = api
     owner = add_user(db, "owner-upload", 1)
     group = add_group(db, owner)
     db.commit()
     actor["user"] = owner
+    content = image_bytes(image_format, width=1234, height=418)
 
     response = upload(
         client,
         group.group_id,
         location="  Floor_A  ",
-        content=webp_bytes(height=418),
+        content=content,
+        filename=filename,
+        content_type=content_type,
     )
 
     assert response.status_code == 201
     assert response.json()["location"] == "Floor_A"
-    assert response.json()["width"] == 800
+    assert response.json()["width"] == 1234
     assert response.json()["height"] == 418
+    assert response.json()["mime_type"] == content_type
     assert response.json()["owner_user_id"] == owner.user_id
     assert response.json()["created_by_user_id"] == owner.user_id
     assert "image_data" not in response.json()
 
     stored = db.get(LocationUsing, response.json()["location_id"])
     assert stored is not None
-    assert stored.image_data.startswith(b"RIFF")
+    assert stored.mime_type == content_type
+
+    image = client.get(f"/api/maps/{stored.location_id}/image")
+    assert image.status_code == 200
+    assert image.headers["content-type"] == content_type
+    assert image.content == content
 
     listed = client.get(f"/api/map-groups/{group.group_id}/maps")
     assert listed.status_code == 200
@@ -192,30 +228,30 @@ def test_upload_rejects_member_duplicate_and_invalid_files(api) -> None:
         location=" floor_b ",
         content=webp_bytes(),
     )
-    wrong_width = upload(
+    arbitrary_size = upload(
         client,
         group.group_id,
-        location="Wrong_Width",
-        content=webp_bytes(width=799),
+        location="Arbitrary_Size",
+        content=webp_bytes(width=799, height=8001),
     )
     wrong_type = upload(
         client,
         group.group_id,
         location="Wrong_Type",
-        content=b"not-webp",
-        filename="floor.png",
-        content_type="image/png",
+        content=b"GIF89a",
+        filename="floor.gif",
+        content_type="image/gif",
     )
     too_large = upload(
         client,
         group.group_id,
         location="Too_Large",
-        content=b"x" * (5 * 1024 * 1024 + 1),
+        content=b"x" * (10 * 1024 * 1024),
     )
 
     assert created.status_code == 201
     assert duplicate.status_code == 409
-    assert wrong_width.status_code == 422
+    assert arbitrary_size.status_code == 201
     assert wrong_type.status_code == 415
     assert too_large.status_code == 413
 
@@ -245,9 +281,9 @@ def test_upload_rejects_disguised_and_animated_webp_at_api_boundary(api) -> None
     )
 
     assert disguised.status_code == 422
-    assert disguised.json()["detail"] == "Nội dung file không phải ảnh WebP hợp lệ"
+    assert disguised.json()["detail"] == "Định dạng nội dung ảnh không khớp tên file hoặc MIME"
     assert animated.status_code == 422
-    assert animated.json()["detail"] == "Không hỗ trợ ảnh WebP động"
+    assert animated.json()["detail"] == "Không hỗ trợ ảnh động"
     assert db.query(LocationUsing).count() == 0
 
 

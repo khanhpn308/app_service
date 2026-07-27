@@ -18,6 +18,7 @@ def test_runtime_and_test_dependencies_are_pinned() -> None:
     assert "python-multipart==0.0.32" in runtime_requirements
     assert "-r requirements.txt" in dev_requirements
     assert "pytest==9.1.1" in dev_requirements
+    assert "httpx==0.28.1" in dev_requirements
 
 
 def test_mysql_schema_declares_all_map_tables_and_mediumblobs() -> None:
@@ -35,3 +36,31 @@ def test_mysql_schema_declares_all_map_tables_and_mediumblobs() -> None:
 
     assert schema_sql.count("MEDIUMBLOB") >= 2
     assert "UNIQUE INDEX `uq_locations_using_location` (`location` ASC)" in schema_sql
+    assert schema_sql.count("CHECK (`width` >= 1)") == 2
+    assert schema_sql.count("CHECK (`height` >= 1)") == 2
+    assert schema_sql.count(
+        "CHECK (`file_size_bytes` >= 1 AND `file_size_bytes` < 10485760)"
+    ) == 2
+
+
+def test_mysql_migration_replaces_the_legacy_map_image_checks() -> None:
+    migration_sql = (
+        WORKSPACE_DIR
+        / "database_service"
+        / "sql"
+        / "010_map_image_upload_contract.sql"
+    ).read_text(encoding="utf-8")
+
+    assert migration_sql.count("DROP CHECK `ck_locations_") == 5
+    assert migration_sql.count("CHECK (`width` >= 1)") == 2
+    assert migration_sql.count("CHECK (`height` >= 1)") == 2
+    assert migration_sql.count(
+        "CHECK (`file_size_bytes` >= 1 AND `file_size_bytes` < 10485760)"
+    ) == 2
+
+
+def test_nginx_allows_ten_mebibyte_map_uploads_with_multipart_overhead() -> None:
+    app_dir = BACKEND_DIR.parent
+    for config_name in ("prod.conf", "prod.https.conf"):
+        config = (app_dir / "nginx" / config_name).read_text(encoding="utf-8")
+        assert "client_max_body_size 11m;" in config
