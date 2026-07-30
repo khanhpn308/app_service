@@ -34,6 +34,19 @@ describe('UploadMapDialog', () => {
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   })
 
+  it('renders the map group selector with readable dark text', async () => {
+    const user = userEvent.setup()
+    render(<UploadMapDialog groups={groups} defaultGroupId={1} />)
+
+    await user.click(screen.getByRole('button', { name: 'Thêm bản đồ' }))
+
+    const groupSelect = screen.getByLabelText('Nhóm bản đồ')
+    const groupOption = screen.getByRole('option', { name: 'Nhà máy A' })
+
+    expect(groupSelect.className).toContain('text-black')
+    expect(groupOption.className).toContain('text-black')
+  })
+
   it('uploads a validated map image into a group the user can manage', async () => {
     const onUploaded = vi.fn()
     const user = userEvent.setup()

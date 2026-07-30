@@ -135,10 +135,14 @@ function UploadMapDialog({ groups, defaultGroupId, onUploaded }) {
               id="upload-map-group"
               value={groupId}
               onChange={(event) => setGroupId(event.target.value)}
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-black"
             >
               {manageableGroups.map((group) => (
-                <option key={group.group_id} value={group.group_id}>
+                <option
+                  key={group.group_id}
+                  value={group.group_id}
+                  className="bg-white text-black"
+                >
                   {group.name}
                 </option>
               ))}
