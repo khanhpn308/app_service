@@ -22,11 +22,10 @@ backend/.venv/
 backend/venv/
 
 # Python cache
-backend/__pycache__/
-backend/.pytest_cache/
-backend/.mypy_cache/
-
-.__pycache__
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
 # IDE and OS
 .idea/  
 .vscode/
@@ -34,3 +33,4 @@ backend/.mypy_cache/
 
 .grapuco
 */__pycache__
+.codegraph/
