@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, getColor }) => {
+const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, getColor, getDeviceName }) => {
   const [aspectRatio, setAspectRatio] = useState(null);
 
   if (!locationName) {
@@ -72,6 +72,7 @@ const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, g
             if (device.x === null || device.y === null) return null;
 
             const color = getColor(device.device_id);
+            const deviceName = getDeviceName(device);
 
             return (
               <div
@@ -94,10 +95,13 @@ const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, g
                   style={{ backgroundColor: color }}
                 />
 
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-20">
-                  <div className="bg-gray-900 text-white text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap">
-                    {device.device_id}
-                  </div>
+                <div
+                  title={deviceName}
+                  aria-label={`Thiết bị ${deviceName}`}
+                  className="absolute bottom-full left-1/2 z-20 mb-2 max-w-[8rem] -translate-x-1/2 truncate whitespace-nowrap text-[10px] font-bold"
+                  style={{ color }}
+                >
+                  {deviceName}
                 </div>
               </div>
             );

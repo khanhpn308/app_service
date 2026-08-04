@@ -1,5 +1,5 @@
 import React from 'react'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -22,9 +22,14 @@ vi.mock('../../../lib/mapsApi', () => ({
 }))
 
 vi.mock('./MapViewer', () => ({
-  default: ({ locationName, floorplanUrl, devices }) => (
+  default: ({ locationName, floorplanUrl, devices, getDeviceName }) => (
     <div data-testid="map-viewer">
       {locationName}|{floorplanUrl}|{devices.length}
+      {devices.map((device) => (
+        <span key={device.device_id} data-testid="map-device-label">
+          {getDeviceName ? getDeviceName(device) : device.device_id}
+        </span>
+      ))}
     </div>
   ),
 }))
@@ -50,7 +55,10 @@ const mapsByGroup = {
 }
 
 describe('GPSDashboard map catalog', () => {
-  afterEach(cleanup)
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+  })
 
   beforeEach(() => {
     listMapGroups.mockResolvedValue(groups)
@@ -103,5 +111,66 @@ describe('GPSDashboard map catalog', () => {
 
     await waitFor(() => expect(deleteMap).toHaveBeenCalledWith(10))
     expect(listGroupMaps).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows device identities without coordinates or per-device timestamps and searches by name or ID', async () => {
+    const user = userEvent.setup()
+    render(
+      <GPSDashboard
+        initialDevices={[
+          {
+            device_id: 662168,
+            devicename: ' GPS3 ',
+            location: 'FLOOR_1',
+            x: 25,
+            y: 44,
+            ts_iso: '2026-08-02T15:28:10.000Z',
+          },
+          {
+            device_id: 42,
+            devicename: '   ',
+            location: 'FLOOR_1',
+            x: null,
+            y: null,
+            ts_iso: null,
+          },
+        ]}
+      />,
+    )
+
+    await screen.findByText(/FLOOR_1\|blob:/)
+    expect(screen.getByText('GPS3(662168)')).toBeTruthy()
+    expect(screen.getAllByText('42')).toHaveLength(2)
+    expect(screen.getAllByTestId('map-device-label')[0].textContent).toBe('GPS3')
+    expect(screen.queryByText(/Tọa độ X/i)).toBeNull()
+    expect(screen.queryByText(/Tọa độ Y/i)).toBeNull()
+    expect(screen.queryByText('15:28:10')).toBeNull()
+
+    const search = screen.getByPlaceholderText('Nhập tên hoặc mã thiết bị...')
+    await user.type(search, 'gps3')
+    expect(screen.getByText('GPS3(662168)')).toBeTruthy()
+    expect(screen.queryByText('42')).toBeNull()
+
+    await user.clear(search)
+    await user.type(search, '42')
+    expect(screen.getAllByText('42')).toHaveLength(2)
+    expect(screen.queryByText('GPS3(662168)')).toBeNull()
+  })
+
+  it('shows one local dashboard clock that ticks every second and cleans up its interval', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 2, 15, 37, 5))
+    const clearIntervalSpy = vi.spyOn(window, 'clearInterval')
+
+    const { unmount } = render(<GPSDashboard />)
+
+    expect(screen.getByLabelText('Thời gian hiện tại').textContent).toBe('15:37:05')
+    expect(screen.queryByText('Live Tracking')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(1000))
+    expect(screen.getByLabelText('Thời gian hiện tại').textContent).toBe('15:37:06')
+
+    unmount()
+    expect(clearIntervalSpy).toHaveBeenCalled()
   })
 })

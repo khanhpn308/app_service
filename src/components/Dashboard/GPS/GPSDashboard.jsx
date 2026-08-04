@@ -19,6 +19,41 @@ const getColor = (id) => {
   return colors[Math.abs(hash) % colors.length]
 }
 
+const getDeviceName = (device) => {
+  const deviceId = String(device?.device_id ?? '')
+  return String(device?.devicename ?? '').trim() || deviceId
+}
+
+const getDeviceIdentity = (device) => {
+  const deviceId = String(device?.device_id ?? '')
+  const deviceName = getDeviceName(device)
+  return deviceName === deviceId ? deviceId : `${deviceName}(${deviceId})`
+}
+
+const formatClockTime = (date) =>
+  [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((value) => String(value).padStart(2, '0'))
+    .join(':')
+
+function DashboardClock() {
+  const [currentTime, setCurrentTime] = useState(() => new Date())
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  return (
+    <time
+      aria-label="Thời gian hiện tại"
+      dateTime={currentTime.toISOString()}
+      className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 font-mono text-sm font-bold tabular-nums text-blue-700"
+    >
+      {formatClockTime(currentTime)}
+    </time>
+  )
+}
+
 function DeviceList({ devices }) {
   return (
     <aside className="flex w-80 flex-col border-l border-gray-100 bg-white shadow-xl">
@@ -36,31 +71,17 @@ function DeviceList({ devices }) {
             key={device.device_id}
             className="group rounded-xl border border-transparent bg-gray-50 p-3 transition-all duration-200 hover:border-blue-200 hover:bg-white hover:shadow-md"
           >
-            <div className="mb-2 flex items-center gap-3">
+            <div className="flex items-center gap-3">
               <div
                 className="h-3 w-3 rounded-full shadow-sm"
                 style={{ backgroundColor: getColor(device.device_id) }}
               />
-              <span className="flex-1 truncate text-sm font-bold text-gray-800">
-                {device.device_id}
+              <span
+                title={getDeviceIdentity(device)}
+                className="flex-1 truncate text-sm font-bold text-gray-800"
+              >
+                {getDeviceIdentity(device)}
               </span>
-              <span className="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[10px] text-blue-600">
-                {device.ts_iso ? device.ts_iso.split('T')[1].split('.')[0] : 'No data'}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 rounded-lg bg-white/50 p-2 text-[10px] text-gray-500">
-              <div className="flex flex-col">
-                <span className="font-medium uppercase text-gray-400">Tọa độ X</span>
-                <span className="font-bold text-gray-700">
-                  {device.x !== null ? `${device.x}%` : 'N/A'}
-                </span>
-              </div>
-              <div className="flex flex-col border-l border-gray-100 pl-2">
-                <span className="font-medium uppercase text-gray-400">Tọa độ Y</span>
-                <span className="font-bold text-gray-700">
-                  {device.y !== null ? `${device.y}%` : 'N/A'}
-                </span>
-              </div>
             </div>
           </div>
         ))}
@@ -191,12 +212,13 @@ const GPSDashboard = ({ initialDevices = [] }) => {
 
   const filteredDevices = useMemo(() => {
     const selectedLocation = String(selectedMap?.location || '').trim().toLowerCase()
+    const normalizedSearch = searchQuery.trim().toLowerCase()
     return (initialDevices || []).filter((device) => {
       const locationMatches =
         String(device.location || '').trim().toLowerCase() === selectedLocation
-      const searchMatches = String(device.device_id || '')
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase())
+      const searchMatches =
+        getDeviceName(device).toLowerCase().includes(normalizedSearch) ||
+        String(device.device_id ?? '').toLowerCase().includes(normalizedSearch)
       return locationMatches && searchMatches
     })
   }, [initialDevices, searchQuery, selectedMap])
@@ -249,7 +271,7 @@ const GPSDashboard = ({ initialDevices = [] }) => {
           <input
             id="gps-device-search"
             type="search"
-            placeholder="Nhập mã thiết bị..."
+            placeholder="Nhập tên hoặc mã thiết bị..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             className="w-full rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm text-gray-900"
@@ -281,15 +303,12 @@ const GPSDashboard = ({ initialDevices = [] }) => {
           <div className="mx-auto max-w-5xl min-w-0">
             <header className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-gray-800">Bản đồ GPS Realtime</h2>
+                <h2 className="text-xl font-bold text-gray-800">Bản đồ Realtime</h2>
                 <p className="text-sm italic text-gray-500">
                   Vị trí hiện tại tại {selectedMap?.location || '...'}
                 </p>
               </div>
-              <div className="flex items-center gap-2 rounded-full border border-green-100 bg-green-50 px-3 py-1">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
-                <span className="text-[10px] font-bold uppercase text-green-700">Live Tracking</span>
-              </div>
+              <DashboardClock />
             </header>
 
             <MapViewer
@@ -299,6 +318,7 @@ const GPSDashboard = ({ initialDevices = [] }) => {
               hasError={!!selectedMap && !!error && !floorplanUrl}
               devices={filteredDevices}
               getColor={getColor}
+              getDeviceName={getDeviceName}
             />
           </div>
         </div>
