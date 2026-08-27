@@ -92,6 +92,7 @@ def register(
         expired_at=body.expired_at,
         status="active",
         role=body.role,
+        can_config_anchor=body.can_config_anchor,
     )
     db.add(user)
     db.commit()

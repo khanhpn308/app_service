@@ -10,6 +10,7 @@ Model ORM: bảng ``device`` — thiết bị IoT (định danh tĩnh, không l�
 from datetime import datetime
 
 from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy.dialects.mysql import DATETIME as MYSQL_DATETIME
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -36,6 +37,9 @@ class Device(Base):
     topic: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Persisted MQTT publish topic used for server -> device messages (e.g. ping echo/downlink).
     publish_topic: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime().with_variant(MYSQL_DATETIME(fsp=6), "mysql"), nullable=True
+    )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, server_default=func.now(), onupdate=func.now()
     )

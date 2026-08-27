@@ -41,6 +41,22 @@ def can_manage_group(
     )
 
 
+def can_config_anchor(
+    user: User,
+    group: MapGroup,
+    *,
+    today: date | None = None,
+) -> bool:
+    """Admins bypass the flag; regular users must be active owners with the flag."""
+    if _is_admin(user):
+        return True
+    return (
+        is_user_active(user, today=today)
+        and user.user_id == group.owner_user_id
+        and user.can_config_anchor == "yes"
+    )
+
+
 def can_view_group(
     db: Session,
     user: User,

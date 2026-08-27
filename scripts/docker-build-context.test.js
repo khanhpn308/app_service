@@ -13,4 +13,10 @@ describe('Docker frontend build context', () => {
     expect(ignoredEntries).toContain('.env.local')
     expect(ignoredEntries).toContain('.env.*.local')
   })
+
+  it('does not ship external font stylesheets blocked by the production CSP', async () => {
+    const html = await readFile('index.html', 'utf8')
+    expect(html).not.toContain('fonts.googleapis.com')
+    expect(html).not.toContain('fonts.gstatic.com')
+  })
 })

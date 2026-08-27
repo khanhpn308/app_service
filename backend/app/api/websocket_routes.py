@@ -25,11 +25,13 @@ Data flow:
        - ESP32 device clients (/ws/esp32/{device_id})
 """
 
+import asyncio
 import json
 import logging
 import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import ValidationError
 
 from app.core.deps import (
     authenticate_ws_device,
@@ -38,8 +40,17 @@ from app.core.deps import (
     ws_user_auth_subprotocol,
 )
 from app.core.ingest import ingest_sensor_payload
+from app.core.db import SessionLocal
 from app.core.realtime_hub import RealtimeHub
 from app.core.test_payload_codec import decode_coordinates_data_proto
+from app.schemas.pings import PingMessage, format_ping_validation_error
+from app.services.anchor_delivery_service import handle_gateway_uplink
+from app.services.ping_service import (
+    PingDeviceNotFoundError,
+    PingGapTooLargeError,
+    PingPersistenceError,
+    persist_ping,
+)
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
 logger = logging.getLogger("uvicorn.error")
@@ -49,6 +60,83 @@ def _get_realtime_hub(websocket: WebSocket) -> RealtimeHub | None:
     """Lấy shared RealtimeHub instance từ app state."""
     app = websocket.app
     return getattr(app.state, "realtime_hub", None)
+
+
+async def _handle_ping_payload(
+    websocket: WebSocket,
+    payload: object,
+    raw_frame: str | bytes,
+) -> bool:
+    """Validate, persist, then echo a recognized application-level ping."""
+    if not isinstance(payload, dict) or payload.get("sensor_type") != "ping":
+        return False
+
+    try:
+        ping = PingMessage.model_validate(payload)
+    except ValidationError as error:
+        await websocket.send_json(
+            {
+                "ok": False,
+                "type": "ping_error",
+                "message": format_ping_validation_error(error),
+            }
+        )
+        return True
+
+    try:
+        await asyncio.to_thread(persist_ping, SessionLocal, ping)
+    except (
+        PingDeviceNotFoundError,
+        PingGapTooLargeError,
+        PingPersistenceError,
+    ) as error:
+        await websocket.send_json(
+            {
+                "ok": False,
+                "type": "ping_error",
+                "message": str(error),
+            }
+        )
+        return True
+
+    if isinstance(raw_frame, bytes):
+        await websocket.send_bytes(raw_frame)
+    else:
+        await websocket.send_text(raw_frame)
+    hub = _get_realtime_hub(websocket)
+    if hub is not None:
+        await hub.publish_ping_stats(
+            str(ping.canonical_device_id),
+            reason="received",
+        )
+    return True
+
+
+@router.websocket("/pings")
+async def ws_ping_admin(websocket: WebSocket) -> None:
+    """Admin-only invalidation stream for Ping summary counters."""
+    hub = _get_realtime_hub(websocket)
+    if hub is None:
+        await websocket.close(code=1011)
+        return
+    user = await authenticate_ws_user(websocket)
+    if user is None:
+        return
+    if user.role != "admin":
+        await websocket.close(code=1008)
+        return
+
+    await hub.connect_ping_admin(
+        websocket,
+        subprotocol=ws_user_auth_subprotocol(websocket),
+    )
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await hub.disconnect_ping_admin(websocket)
 
 
 @router.websocket("/global")
@@ -215,9 +303,8 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
         2. Server accept kết nối và thêm vào group `_esp32_clients[device_id]` của hub.
         3. Server reply: `{"ok": true, "device_id": "...", "message": "connected"}`.
         4. **Uplink (device → server)**:
-           - Device gửi JSON frame: `{"temperature": 28.5, "timestamp_ms": ...}`.
-           - Server echo lại `{"ok": true, "received": {...}}` làm ack.
-           - Server có thể integrate payload vào InfluxDB/RealtimeHub broadcast (TODO).
+           - JSON Ping hợp lệ được validate, commit MySQL rồi exact raw echo, không đi telemetry.
+           - Payload khác Ping tiếp tục qua ACK/presence và InfluxDB/RealtimeHub hiện có.
         5. **Downlink (server → device)**:
            - Server gọi `hub.send_to_esp32(device_id, {"cmd": "reboot", ...})` từ REST API hoặc khác.
            - Frame gửi tới tất cả ESP32 kết nối với `device_id` này.
@@ -242,15 +329,16 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
         - Nếu disconnect: cleanup và gỡ khỏi group.
 
     Lưu ý:
-        - Hiện tại endpoint chỉ nhận + echo; chưa integrate uplink data vào InfluxDB/DB.
+        - Endpoint bắt buộc xác thực device password trước khi accept kết nối.
+        - URL `device_id` là danh tính Gateway xác thực; JSON Ping `device_id` là Node nguồn.
         - Downlink command có thể thêm sau (gọi `hub.send_to_esp32()` từ API route).
-        - TODO: xác thực device (API key, JWT token, hoặc device_secret).
     """
     hub = _get_realtime_hub(websocket)
     if hub is None:
         await websocket.close(code=1011)
         return
-    if await authenticate_ws_device(websocket, device_id) is None:
+    authenticated_device = await authenticate_ws_device(websocket, device_id)
+    if authenticated_device is None:
         return  # authenticate_ws_device đã close(1008)
 
     await hub.connect_esp32(
@@ -272,16 +360,16 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
                 if raw_text is None and raw_bytes is None:
                     continue
 
-                # ESP32 keep-alive ping: echo back the exact same frame.
-                # Firmware dấu hiệu ping: payload bắt đầu bằng "PING|".
-                if raw_text is not None and str(raw_text).startswith("PING|"):
-                    await websocket.send_text(str(raw_text))
-                    continue
-                if raw_bytes is not None and raw_bytes.startswith(b"PING|"):
-                    await websocket.send_bytes(raw_bytes)
-                    continue
-
                 if raw_bytes is not None:
+                    binary_payload = None
+                    try:
+                        binary_payload = json.loads(raw_bytes.decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        pass
+
+                    if await _handle_ping_payload(websocket, binary_payload, raw_bytes):
+                        continue
+
                     decoded_payload = None
                     try:
                         decoded_payload = decode_coordinates_data_proto(raw_bytes)
@@ -292,6 +380,10 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
                         decoded_payload["server_receive_ms"] = time.time_ns() // 1_000_000
                         decoded_payload.setdefault("device_id", str(device_id))
                         decoded_payload.setdefault("topic", f"ws/{device_id}")
+                        if (authenticated_device.device_type or "").strip().casefold() == "gateway":
+                            presence = getattr(websocket.app.state, "gateway_presence", None)
+                            if presence is not None:
+                                presence.touch(authenticated_device.device_id)
                         # Pipeline chung: ghi Influx + broadcast (/ws/global và /ws/devices/{id}).
                         ingest_sensor_payload(websocket.app, decoded_payload)
                     await websocket.send_json(
@@ -303,20 +395,38 @@ async def ws_esp32(websocket: WebSocket, device_id: str) -> None:
                     )
                     continue
 
-                if not str(raw_text).strip():
+                raw_text_value = str(raw_text)
+                if not raw_text_value.strip():
                     await websocket.send_json({"ok": True, "type": "pong", "device_id": device_id})
                     continue
                 try:
-                    payload = json.loads(str(raw_text))
+                    payload = json.loads(raw_text_value)
                 except json.JSONDecodeError:
-                    await websocket.send_json({"ok": True, "device_id": device_id, "echo": str(raw_text)})
+                    await websocket.send_json({"ok": True, "device_id": device_id, "echo": raw_text_value})
+                    continue
+
+                if await _handle_ping_payload(websocket, payload, raw_text_value):
                     continue
 
                 payload["server_receive_ms"] = time.time_ns() // 1_000_000
                 payload.setdefault("device_id", device_id)
                 payload.setdefault("topic", f"ws/{device_id}")
+                handled_ack = False
+                if (authenticated_device.device_type or "").strip().casefold() == "gateway":
+                    with SessionLocal() as db:
+                        handled_ack = handle_gateway_uplink(
+                            db,
+                            payload,
+                            authenticated_gateway_id=authenticated_device.device_id,
+                        )
+                        if handled_ack:
+                            db.commit()
+                    presence = getattr(websocket.app.state, "gateway_presence", None)
+                    if presence is not None:
+                        presence.touch(authenticated_device.device_id)
                 # Pipeline chung: ghi Influx + broadcast cho dashboards.
-                ingest_sensor_payload(websocket.app, payload)
+                if not handled_ack:
+                    ingest_sensor_payload(websocket.app, payload)
 
                 await websocket.send_json({"ok": True, "device_id": device_id, "received": payload})
             except WebSocketDisconnect:

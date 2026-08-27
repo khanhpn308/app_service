@@ -7,7 +7,7 @@ import MapGroupManagerDialog from './MapGroupManagerDialog';
 import {
   createMapGroup,
   deleteMapGroup,
-  inviteMapGroupMember,
+  inviteMapGroupMembersBulk,
   listMapGroupMembers,
   listMapGroups,
   listMyMapGroupInvitations,
@@ -27,7 +27,7 @@ vi.mock('../../../contexts/AuthContext', () => ({
 vi.mock('../../../lib/mapGroupsApi', () => ({
   createMapGroup: vi.fn(),
   deleteMapGroup: vi.fn(),
-  inviteMapGroupMember: vi.fn(),
+  inviteMapGroupMembersBulk: vi.fn(),
   listMapGroupMembers: vi.fn(),
   listMapGroups: vi.fn(),
   listMyMapGroupInvitations: vi.fn(),
@@ -97,7 +97,11 @@ describe('MapGroupManagerDialog', () => {
     createMapGroup.mockResolvedValue(ownerGroup);
     deleteMapGroup.mockResolvedValue(null);
     renameMapGroup.mockResolvedValue({ ...ownerGroup, name: 'Renamed' });
-    inviteMapGroupMember.mockResolvedValue({});
+    inviteMapGroupMembersBulk.mockResolvedValue({
+      invited_count: 1,
+      error_count: 0,
+      results: [{ username: 'new-member', status: 'invited', code: null, message: null }],
+    });
     removeMapGroupMember.mockResolvedValue(null);
     respondToMapGroupInvitation.mockResolvedValue({});
     listDeletedMaps.mockResolvedValue({
@@ -160,12 +164,40 @@ describe('MapGroupManagerDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Lưu tên' }));
     expect(renameMapGroup).toHaveBeenCalledWith(1, 'Renamed');
 
-    await user.type(screen.getByLabelText('Username cần mời'), 'new-member');
-    await user.click(screen.getByRole('button', { name: 'Gửi lời mời' }));
-    expect(inviteMapGroupMember).toHaveBeenCalledWith(1, 'new-member');
+    await user.type(screen.getByLabelText('Usernames cần mời'), 'new-member');
+    await user.click(screen.getByRole('button', { name: 'Gửi lời mời hàng loạt' }));
+    expect(inviteMapGroupMembersBulk).toHaveBeenCalledWith(1, ['new-member']);
 
     await user.click(screen.getByRole('button', { name: 'Gỡ member' }));
     expect(removeMapGroupMember).toHaveBeenCalledWith(1, 7);
+  });
+
+  it('parses multiline usernames and shows each bulk invitation result', async () => {
+    inviteMapGroupMembersBulk.mockResolvedValueOnce({
+      invited_count: 1,
+      error_count: 2,
+      results: [
+        { username: 'invited', status: 'invited', code: null, message: null },
+        { username: 'missing', status: 'error', code: 'user_not_found', message: 'Không tìm thấy người dùng' },
+        { username: 'existing', status: 'error', code: 'already_member', message: 'Đã là thành viên' },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<MapGroupManagerDialog />);
+    await user.click(screen.getByRole('button', { name: 'Quản lý nhóm' }));
+    await user.click(await screen.findByRole('button', { name: /Quản lý Factory A/ }));
+    await screen.findByText('Member User');
+
+    await user.type(screen.getByLabelText('Usernames cần mời'), 'invited\nmissing, existing');
+    await user.click(screen.getByRole('button', { name: 'Gửi lời mời hàng loạt' }));
+
+    expect(inviteMapGroupMembersBulk).toHaveBeenCalledWith(1, ['invited', 'missing', 'existing']);
+    expect(await screen.findByText('@invited')).toBeTruthy();
+    expect(screen.getByText('Đã mời')).toBeTruthy();
+    expect(screen.getByText('@missing')).toBeTruthy();
+    expect(screen.getByText('Không tìm thấy người dùng')).toBeTruthy();
+    expect(screen.getByText('@existing')).toBeTruthy();
+    expect(screen.getByText('Đã là thành viên')).toBeTruthy();
   });
 
   it('shows owner username for admin creation and accepts an invitation', async () => {

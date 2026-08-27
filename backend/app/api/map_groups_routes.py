@@ -17,6 +17,9 @@ from app.core.security import decode_token
 from app.models.map_group import MapGroup, MapGroupMembership
 from app.models.user import User
 from app.schemas.map_groups import (
+    BulkInvitationCreate,
+    BulkInvitationResponse,
+    BulkInvitationResult,
     GroupCreate,
     GroupPatch,
     GroupPublic,
@@ -333,6 +336,110 @@ def invite_group_member(
         ) from exc
     db.refresh(membership)
     return _membership_public(db, membership)
+
+@group_router.post(
+    "/{group_id}/invitations/bulk",
+    response_model=BulkInvitationResponse,
+)
+@limiter.limit("100/hour", key_func=_invite_rate_key)
+def invite_group_members_bulk(
+    request: Request,
+    group_id: int,
+    body: BulkInvitationCreate,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> BulkInvitationResponse:
+    """Invite up to 50 exact usernames with independent result entries."""
+    group = _manageable_group_or_404(db, group_id, actor)
+    seen: set[str] = set()
+    results: list[BulkInvitationResult] = []
+    invited_at = _utcnow()
+
+    for username in body.usernames:
+        if username in seen:
+            results.append(
+                BulkInvitationResult(
+                    username=username,
+                    status="error",
+                    code="duplicate_input",
+                    message="Username bị lặp trong danh sách",
+                )
+            )
+            continue
+        seen.add(username)
+        target = _user_by_exact_username(db, username)
+        if target is None:
+            results.append(
+                BulkInvitationResult(
+                    username=username,
+                    status="error",
+                    code="user_not_found",
+                    message="Không tìm thấy người dùng",
+                )
+            )
+            continue
+        if target.user_id in {group.owner_user_id, actor.user_id}:
+            results.append(
+                BulkInvitationResult(
+                    username=username,
+                    status="error",
+                    code="self_invite",
+                    message="Không thể tự mời vào nhóm",
+                )
+            )
+            continue
+        if not is_user_active(target):
+            results.append(
+                BulkInvitationResult(
+                    username=username,
+                    status="error",
+                    code="inactive_user",
+                    message="Tài khoản được mời không còn hiệu lực",
+                )
+            )
+            continue
+
+        membership = db.get(MapGroupMembership, (group.group_id, target.user_id))
+        if membership is not None and membership.status != "rejected":
+            results.append(
+                BulkInvitationResult(
+                    username=username,
+                    status="error",
+                    code="already_member",
+                    message="Lời mời hoặc thành viên đã tồn tại",
+                )
+            )
+            continue
+        if membership is None:
+            membership = MapGroupMembership(
+                group_id=group.group_id,
+                user_id=target.user_id,
+                status="pending",
+                invited_by_user_id=actor.user_id,
+                invited_at=invited_at,
+            )
+            db.add(membership)
+        else:
+            membership.status = "pending"
+            membership.invited_by_user_id = actor.user_id
+            membership.invited_at = invited_at
+            membership.responded_at = None
+        results.append(BulkInvitationResult(username=username, status="invited"))
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Danh sách lời mời xung đột với dữ liệu hiện tại",
+        ) from exc
+    invited_count = sum(result.status == "invited" for result in results)
+    return BulkInvitationResponse(
+        invited_count=invited_count,
+        error_count=len(results) - invited_count,
+        results=results,
+    )
 
 
 @group_router.delete(

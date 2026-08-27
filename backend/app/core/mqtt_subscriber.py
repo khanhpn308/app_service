@@ -64,6 +64,7 @@ class MqttSubscriber:
         max_messages: int,
         on_sensor_payload: Callable[[dict[str, Any]], None] | None = None,
         on_ping_reply_topic: Callable[[str], str | None] | None = None,
+        on_gateway_payload: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> None:
         self._enabled = enabled
         self._host = host
@@ -76,6 +77,7 @@ class MqttSubscriber:
         self._qos = int(qos)
         self._on_sensor_payload = on_sensor_payload
         self._on_ping_reply_topic = on_ping_reply_topic
+        self._on_gateway_payload = on_gateway_payload
 
         self._messages: deque[MqttMessage] = deque(maxlen=max(1, int(max_messages)))
         self._lock = threading.Lock()
@@ -236,6 +238,23 @@ class MqttSubscriber:
             self._last_connect_error = f"publish failed ({t}): {exc}"
             return {"ok": False, "error": str(exc)}
 
+    def publish_qos1_retained(
+        self, topic: str, payload: bytes, *, timeout_seconds: int = 10
+    ) -> bool:
+        """Publish one retained snapshot and wait until the broker confirms QoS 1."""
+        t = str(topic or "").strip()
+        if not t or not self._enabled or not self._connected:
+            return False
+        try:
+            info = self._client.publish(t, payload=bytes(payload), qos=1, retain=True)
+            if info.rc != mqtt.MQTT_ERR_SUCCESS:
+                return False
+            info.wait_for_publish(timeout=max(1, int(timeout_seconds)))
+            return bool(info.is_published())
+        except Exception as exc:  # noqa: BLE001
+            self._last_connect_error = f"anchor publish failed ({t}): {exc}"
+            return False
+
     def _on_connect(self, client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any, properties: Any) -> None:  # noqa: ARG002
         """Callback paho: subscribe từng topic sau khi kết nối thành công."""
         self._connected = bool(getattr(reason_code, "value", reason_code) == 0)
@@ -292,6 +311,28 @@ class MqttSubscriber:
                     MqttMessage(
                         topic=topic,
                         payload=payload_raw,
+                        qos=int(getattr(msg, "qos", 0)),
+                        retain=bool(getattr(msg, "retain", False)),
+                        received_at=time.time(),
+                    )
+                )
+            return
+
+        try:
+            raw_json = json.loads(payload_raw)
+        except Exception:  # noqa: BLE001
+            raw_json = None
+        if isinstance(raw_json, dict) and self._on_gateway_payload is not None:
+            try:
+                self._on_gateway_payload(topic, raw_json)
+            except Exception as exc:  # noqa: BLE001
+                self._last_connect_error = f"gateway payload callback error: {exc}"
+        if isinstance(raw_json, dict) and raw_json.get("type") == "anchor_config_ack":
+            with self._lock:
+                self._messages.append(
+                    MqttMessage(
+                        topic=topic,
+                        payload=json.dumps(raw_json, ensure_ascii=False),
                         qos=int(getattr(msg, "qos", 0)),
                         retain=bool(getattr(msg, "retain", False)),
                         received_at=time.time(),

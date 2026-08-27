@@ -1,5 +1,5 @@
 import React from 'react'
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import GPSPage from './GPSPage'
@@ -58,5 +58,15 @@ describe('GPSPage device catalog authorization', () => {
     await waitFor(() => {
       expect(apiFetch).toHaveBeenCalledWith('/api/devices')
     })
+  })
+
+  it('renders the dashboard in a full-bleed viewport shell', async () => {
+    render(<GPSPage />)
+
+    await screen.findByTestId('gps-dashboard')
+    const shell = screen.getByTestId('gps-page-shell')
+    expect(shell.className).toContain('w-full')
+    expect(shell.className).not.toContain('rounded-xl')
+    expect(shell.className).not.toContain('shadow-xl')
   })
 })

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import WebSocket
 
@@ -28,6 +28,7 @@ class RealtimeHub:
         self._global_clients: set[WebSocket] = set()
         self._device_clients: dict[str, set[WebSocket]] = defaultdict(set)
         self._esp32_clients: dict[str, set[WebSocket]] = defaultdict(set)
+        self._ping_admin_clients: set[WebSocket] = set()
         self._lock = asyncio.Lock()
 
     async def start(self) -> None:
@@ -54,9 +55,11 @@ class RealtimeHub:
                 all_ws.update(group)
             for group in self._esp32_clients.values():
                 all_ws.update(group)
+            all_ws.update(self._ping_admin_clients)
             self._global_clients.clear()
             self._device_clients.clear()
             self._esp32_clients.clear()
+            self._ping_admin_clients.clear()
 
         for ws in all_ws:
             try:
@@ -101,6 +104,17 @@ class RealtimeHub:
         async with self._lock:
             self._esp32_clients[key].add(websocket)
 
+    async def connect_ping_admin(
+        self,
+        websocket: WebSocket,
+        *,
+        subprotocol: str | None = None,
+    ) -> None:
+        """Accept and register an authenticated admin statistics client."""
+        await websocket.accept(subprotocol=subprotocol)
+        async with self._lock:
+            self._ping_admin_clients.add(websocket)
+
     async def disconnect_global(self, websocket: WebSocket) -> None:
         """Gỡ kết nối khỏi nhóm global khi client ngắt."""
         async with self._lock:
@@ -127,6 +141,57 @@ class RealtimeHub:
             group.discard(websocket)
             if not group:
                 self._esp32_clients.pop(key, None)
+
+    async def disconnect_ping_admin(self, websocket: WebSocket) -> None:
+        """Remove a Ping admin client after disconnect."""
+        async with self._lock:
+            self._ping_admin_clients.discard(websocket)
+
+    async def publish_ping_stats(
+        self,
+        device_id: str,
+        *,
+        reason: Literal["received", "cleared"],
+    ) -> int:
+        """Broadcast one redacted stats invalidation only to Ping admin clients."""
+        event = {
+            "type": "ping_stats_updated",
+            "device_id": str(device_id),
+            "reason": reason,
+        }
+        async with self._lock:
+            targets = set(self._ping_admin_clients)
+
+        sent = 0
+        stale: list[WebSocket] = []
+        for ws in targets:
+            try:
+                await ws.send_json(event)
+                sent += 1
+            except Exception:  # noqa: BLE001
+                stale.append(ws)
+
+        if stale:
+            async with self._lock:
+                for ws in stale:
+                    self._ping_admin_clients.discard(ws)
+        return sent
+
+    def publish_ping_stats_from_thread(
+        self,
+        device_id: str,
+        *,
+        reason: Literal["received", "cleared"],
+    ) -> None:
+        """Schedule a Ping admin event from a synchronous FastAPI worker thread."""
+        loop = self._loop
+        if loop is None:
+            return
+
+        def _schedule() -> None:
+            asyncio.create_task(self.publish_ping_stats(device_id, reason=reason))
+
+        loop.call_soon_threadsafe(_schedule)
 
     async def send_to_esp32(self, device_id: str, message: dict[str, Any]) -> int:
         """Gửi JSON message tới các websocket ESP32 đang gắn với một device_id."""

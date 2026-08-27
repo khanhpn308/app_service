@@ -201,6 +201,180 @@ def _column_exists(conn, table: str, column: str) -> bool:
     return (r.scalar() or 0) > 0
 
 
+def _index_exists(conn, table: str, index: str) -> bool:
+    result = conn.execute(
+        text(
+            "SELECT COUNT(*) FROM information_schema.STATISTICS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i"
+        ),
+        {"t": table, "i": index},
+    )
+    return (result.scalar() or 0) > 0
+
+
+def ensure_anchor_mac_address_column(engine: Engine) -> None:
+    """Add the canonical MAC column and safely backfill already-valid legacy IDs."""
+    if engine.dialect.name != "mysql":
+        return
+
+    with engine.begin() as conn:
+        if not _column_exists(conn, "anchor", "mac_address"):
+            conn.execute(
+                text(
+                    "ALTER TABLE `anchor` ADD COLUMN `mac_address` VARCHAR(17) NULL "
+                    "AFTER `hardware_id`, ALGORITHM=INSTANT"
+                )
+            )
+        conn.execute(
+            text(
+                "UPDATE `anchor` SET `mac_address` = UPPER(TRIM(`hardware_id`)) "
+                "WHERE `mac_address` IS NULL "
+                "AND UPPER(TRIM(`hardware_id`)) "
+                "REGEXP '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'"
+            )
+        )
+        if not _index_exists(conn, "anchor", "uq_anchor_mac_address"):
+            conn.execute(
+                text(
+                    "ALTER TABLE `anchor` ADD UNIQUE INDEX "
+                    "`uq_anchor_mac_address` (`mac_address`)"
+                )
+            )
+
+    logger.info("db_migrate: ensure_anchor_mac_address_column OK")
+
+
+def ensure_anchor_delta_delivery_columns(engine: Engine) -> None:
+    """Add per-Gateway targeting/payload columns and backfill existing deliveries."""
+    if engine.dialect.name != "mysql":
+        return
+
+    with engine.begin() as conn:
+        if not _column_exists(conn, "anchor_config_outbox", "target_gateway_id"):
+            conn.execute(
+                text(
+                    "ALTER TABLE `anchor_config_outbox` ADD COLUMN "
+                    "`target_gateway_id` BIGINT NULL AFTER `location`"
+                )
+            )
+        payload_added = not _column_exists(
+            conn, "anchor_config_delivery", "payload"
+        )
+        if payload_added:
+            conn.execute(
+                text(
+                    "ALTER TABLE `anchor_config_delivery` ADD COLUMN "
+                    "`payload` JSON NULL AFTER `publish_topic`"
+                )
+            )
+        conn.execute(
+            text(
+                "UPDATE `anchor_config_delivery` AS delivery "
+                "JOIN `anchor_config_outbox` AS outbox "
+                "ON outbox.`revision` = delivery.`revision` "
+                "SET delivery.`payload` = outbox.`payload` "
+                "WHERE delivery.`payload` IS NULL"
+            )
+        )
+        nullable = conn.execute(
+            text(
+                "SELECT IS_NULLABLE FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() "
+                "AND TABLE_NAME = :t AND COLUMN_NAME = :c"
+            ),
+            {"t": "anchor_config_delivery", "c": "payload"},
+        ).scalar()
+        if payload_added or str(nullable or "").upper() == "YES":
+            conn.execute(
+                text(
+                    "ALTER TABLE `anchor_config_delivery` "
+                    "MODIFY COLUMN `payload` JSON NOT NULL"
+                )
+            )
+
+    logger.info("db_migrate: ensure_anchor_delta_delivery_columns OK")
+
+
+def ensure_anchor_phase0_columns(engine: Engine) -> None:
+    """Add and normalize Phase 0 user/device columns on existing MySQL volumes.
+
+    New Anchor tables are created by ``Base.metadata.create_all``. Existing tables do
+    not receive new columns from ``create_all``, so this additive patch handles the two
+    columns needed before later permission and gateway-liveness phases.
+    """
+
+    if engine.dialect.name != "mysql":
+        return
+
+    with engine.begin() as conn:
+        permission_added = not _column_exists(conn, "user", "can_config_anchor")
+        if permission_added:
+            conn.execute(
+                text(
+                    "ALTER TABLE `user` ADD COLUMN `can_config_anchor` "
+                    "ENUM('yes','no') NOT NULL DEFAULT 'no', ALGORITHM=INSTANT"
+                )
+            )
+
+        conn.execute(
+            text(
+                "UPDATE `user` SET `can_config_anchor` = 'no' "
+                "WHERE `can_config_anchor` IS NULL"
+            )
+        )
+        if not permission_added:
+            permission_contract = conn.execute(
+                text(
+                    "SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT "
+                    "FROM information_schema.COLUMNS "
+                    "WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME = 'user' AND COLUMN_NAME = 'can_config_anchor'"
+                )
+            ).first()
+            expected_contract = ("enum('yes','no')", "NO", "no")
+            actual_contract = (
+                tuple(str(value) if value is not None else None for value in permission_contract)
+                if permission_contract is not None
+                else None
+            )
+            # Repair an earlier nullable or differently typed ERD draft only once.
+            if actual_contract != expected_contract:
+                conn.execute(
+                    text(
+                        "ALTER TABLE `user` MODIFY COLUMN `can_config_anchor` "
+                        "ENUM('yes','no') NOT NULL DEFAULT 'no'"
+                    )
+                )
+
+        if not _column_exists(conn, "device", "last_seen_at"):
+            conn.execute(
+                text(
+                    "ALTER TABLE `device` ADD COLUMN `last_seen_at` "
+                    "DATETIME(6) NULL, ALGORITHM=INSTANT"
+                )
+            )
+
+    logger.info("db_migrate: ensure_anchor_phase0_columns OK")
+
+
+def ensure_anchor_location_snapshot(engine: Engine) -> None:
+    """Drop the legacy location FK so inactive Anchors survive map archival."""
+    if engine.dialect.name != "mysql":
+        return
+    with engine.begin() as conn:
+        constraint = conn.execute(
+            text(
+                "SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'anchor' "
+                "AND COLUMN_NAME = 'location_id' AND REFERENCED_TABLE_NAME = 'locations_using'"
+            )
+        ).scalar()
+        if constraint:
+            safe_name = str(constraint).replace("`", "")
+            conn.execute(text(f"ALTER TABLE `anchor` DROP FOREIGN KEY `{safe_name}`"))
+    logger.info("db_migrate: ensure_anchor_location_snapshot OK")
+
+
 def ensure_user_cccd_varchar(engine: Engine) -> None:
     """
     Đổi `user.cccd` từ DECIMAL/Numeric sang VARCHAR(12).

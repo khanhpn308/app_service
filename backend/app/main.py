@@ -24,6 +24,10 @@ from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.db import SessionLocal, engine
 from app.core.db_migrate import (
+    ensure_anchor_delta_delivery_columns,
+    ensure_anchor_mac_address_column,
+    ensure_anchor_phase0_columns,
+    ensure_anchor_location_snapshot,
     ensure_device_authorization_granted_by_varchar,
     ensure_device_drop_last_reading_columns,
     ensure_device_publish_topic_column,
@@ -40,6 +44,8 @@ from app.core.influx_service import InfluxService
 from app.core.ingest import ingest_sensor_payload
 from app.core.mqtt_subscriber import MqttSubscriber
 from app.core.realtime_hub import RealtimeHub
+from app.services.anchor_delivery_service import AnchorDispatcher, handle_gateway_uplink
+from app.services.gateway_presence import GatewayPresence
 from app.core.seed import (
     ensure_default_admin,
     ensure_default_devices,
@@ -49,6 +55,7 @@ from app.core.user_expiry import deactivate_expired_users
 from app.models.device import Device
 from app.models import device  # noqa: F401 — đăng ký model với metadata
 from app.models import device_authorization  # noqa: F401
+from app.models import ping  # noqa: F401
 from app.models import user  # noqa: F401
 from app.models.base import Base
 from app.api.websocket_routes import router as websocket_router
@@ -88,6 +95,10 @@ async def lifespan(app: FastAPI):
     ensure_user_cccd_varchar(engine)
     ensure_schema_hardening(engine)
     ensure_map_image_constraints(engine)
+    ensure_anchor_phase0_columns(engine)
+    ensure_anchor_mac_address_column(engine)
+    ensure_anchor_delta_delivery_columns(engine)
+    ensure_anchor_location_snapshot(engine)
 
     """Sau khi schema đã sẵn sàng, dùng session ORM để seed dữ liệu mặc định và xử lý user hết hạn.
     thao tác với database bằng python class model -> sử dụng session ORM.
@@ -115,9 +126,44 @@ async def lifespan(app: FastAPI):
     await realtime_hub.start()
     app.state.realtime_hub = realtime_hub
 
+    gateway_presence = GatewayPresence(
+        SessionLocal, flush_seconds=settings.gateway_presence_flush_seconds
+    )
+    app.state.gateway_presence = gateway_presence
+
+    def _trusted_gateway_id(payload: dict, topic: str | None) -> int | None:
+        try:
+            gateway_id = int(payload.get("gateway_id") or payload.get("device_id"))
+        except (TypeError, ValueError):
+            return None
+        with SessionLocal() as db:
+            row = db.get(Device, gateway_id)
+            if (
+                row is None
+                or (row.device_type or "").strip().casefold() != "gateway"
+                or (row.status or "").strip().casefold() != "active"
+                or (topic is not None and (row.topic or "").strip() != topic.strip())
+            ):
+                return None
+        return gateway_id
+
     def _handle_sensor_payload(payload: dict) -> None:
         # Dùng pipeline chung (ghi Influx + broadcast) — cùng đường với WebSocket uplink.
+        gateway_id = _trusted_gateway_id(
+            payload, str(payload.get("topic") or "").strip() or None
+        )
+        if gateway_id is not None:
+            gateway_presence.touch(gateway_id)
         ingest_sensor_payload(app, payload)
+
+    def _handle_gateway_payload(topic: str, payload: dict) -> None:
+        gateway_id = _trusted_gateway_id(payload, topic)
+        if gateway_id is None:
+            return
+        with SessionLocal() as db:
+            if handle_gateway_uplink(db, payload, mqtt_topic=topic):
+                db.commit()
+                gateway_presence.touch(gateway_id)
 
     def _resolve_ping_reply_topic(incoming_topic: str) -> str | None:
         t = str(incoming_topic or "").strip()
@@ -147,6 +193,7 @@ async def lifespan(app: FastAPI):
         max_messages=settings.mqtt_max_messages,
         on_sensor_payload=_handle_sensor_payload,
         on_ping_reply_topic=_resolve_ping_reply_topic,
+        on_gateway_payload=_handle_gateway_payload,
     )
     mqtt_sub.start()
     # Restore topic subscriptions from persisted device.topic values.
@@ -157,7 +204,29 @@ async def lifespan(app: FastAPI):
         if t:
             mqtt_sub.subscribe_topic(t)
     app.state.mqtt = mqtt_sub
+    retry_schedule = tuple(
+        int(value.strip())
+        for value in settings.anchor_retry_schedule_seconds.split(",")
+        if value.strip().isdigit() and int(value.strip()) > 0
+    )
+    anchor_dispatcher = AnchorDispatcher(
+        session_factory=SessionLocal,
+        publish=lambda topic, payload: mqtt_sub.publish_qos1_retained(
+            topic, payload, timeout_seconds=settings.anchor_publish_timeout_seconds
+        ),
+        retry_schedule=retry_schedule,
+        retry_steady=settings.anchor_retry_steady_seconds,
+        lease_seconds=settings.anchor_dispatcher_lease_seconds,
+        poll_seconds=settings.anchor_dispatcher_poll_seconds,
+    )
+    if settings.anchor_dispatcher_enabled:
+        anchor_dispatcher.start()
+    app.state.anchor_dispatcher = anchor_dispatcher
     yield
+    try:
+        anchor_dispatcher.stop()
+    except Exception:  # noqa: BLE001
+        pass
     try:
         mqtt_sub.stop()
     except Exception:  # noqa: BLE001 — shutdown: không crash process

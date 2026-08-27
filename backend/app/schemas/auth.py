@@ -29,6 +29,7 @@ class RegisterRequest(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
     expired_at: date = Field(..., description="Last valid day (inclusive); 0 remaining days => deactive")
     role: Literal["admin", "user"]
+    can_config_anchor: Literal["yes", "no"] = "no"
 
     @field_validator("cccd")
     @classmethod
@@ -56,6 +57,7 @@ class UserPublic(BaseModel):
     expired_at: date | None
     status: str
     role: str
+    can_config_anchor: Literal["yes", "no"]
     authorized_devices: list[AuthorizedDeviceBrief] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
@@ -79,6 +81,10 @@ class UserPublic(BaseModel):
 
 class UserStatusPatch(BaseModel):
     status: Literal["active", "deactive"]
+
+
+class UserAnchorPermissionPatch(BaseModel):
+    can_config_anchor: Literal["yes", "no"]
 
 
 class TokenResponse(BaseModel):

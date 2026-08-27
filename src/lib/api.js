@@ -45,7 +45,9 @@ async function throwResponseError(res) {
       message = JSON.stringify(detail)
     }
   }
-  throw new Error(message || 'Request failed')
+  const error = new Error(message || 'Request failed')
+  error.status = res.status
+  throw error
 }
 
 export async function apiFetch(path, options = {}) {

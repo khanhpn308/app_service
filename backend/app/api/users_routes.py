@@ -24,7 +24,7 @@ from app.core.user_expiry import deactivate_expired_users
 from app.models.device import Device
 from app.models.device_authorization import DeviceAuthorization
 from app.models.user import User
-from app.schemas.auth import UserPublic, UserStatusPatch
+from app.schemas.auth import UserAnchorPermissionPatch, UserPublic, UserStatusPatch
 from app.schemas.authorizations import AuthorizedDeviceBrief
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -77,6 +77,24 @@ def patch_user_status(
     if target is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
     target.status = body.status
+    db.add(target)
+    db.commit()
+    db.refresh(target)
+    return UserPublic.model_validate(target)
+
+
+@router.patch("/{user_id}/anchor-permission", response_model=UserPublic)
+def patch_user_anchor_permission(
+    user_id: int,
+    body: UserAnchorPermissionPatch,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> UserPublic:
+    """Admin cấp hoặc thu hồi quyền cấu hình Anchor của một user."""
+    target = db.query(User).filter(User.user_id == user_id).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
+    target.can_config_anchor = body.can_config_anchor
     db.add(target)
     db.commit()
     db.refresh(target)

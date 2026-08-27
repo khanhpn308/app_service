@@ -46,6 +46,34 @@ class InvitationCreate(BaseModel):
 
     _normalize_username = field_validator("username")(_trim_required)
 
+class BulkInvitationCreate(BaseModel):
+    usernames: list[str] = Field(min_length=1, max_length=50)
+
+    @field_validator("usernames")
+    @classmethod
+    def normalize_usernames(cls, values: list[str]) -> list[str]:
+        normalized = [_trim_required(value) for value in values]
+        if any(len(value) > 45 for value in normalized):
+            raise ValueError("Username không được dài quá 45 ký tự")
+        return normalized
+
+class BulkInvitationResult(BaseModel):
+    username: str
+    status: Literal["invited", "error"]
+    code: Literal[
+        "duplicate_input",
+        "user_not_found",
+        "inactive_user",
+        "already_member",
+        "self_invite",
+    ] | None = None
+    message: str | None = None
+
+class BulkInvitationResponse(BaseModel):
+    invited_count: int
+    error_count: int
+    results: list[BulkInvitationResult]
+
 
 class InvitationPatch(BaseModel):
     status: Literal["accepted", "rejected"]

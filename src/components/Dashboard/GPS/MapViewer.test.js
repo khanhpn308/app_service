@@ -14,14 +14,16 @@ const mapViewerPath = resolve(
 
 afterEach(cleanup);
 
-test('coordinate overlay uses the same responsive 800px frame as the floorplan image', async () => {
+test('coordinate overlay fits the complete floorplan inside the available viewport', async () => {
   const source = await readFile(mapViewerPath, 'utf8');
 
-  expect(source).toMatch(/max-w-\[800px\]/);
+  expect(source).toMatch(/ResizeObserver/);
+  expect(source).toMatch(/frameSize/);
   expect(source).toMatch(/onLoad=/);
   expect(source).toMatch(/aspectRatio/);
-  expect(source).toMatch(/calc\(\(100vh - 360px\) \*/);
-  expect(source).toMatch(/className="block w-full h-full pointer-events-none"/);
+  expect(source).not.toMatch(/1200px/);
+  expect(source).not.toMatch(/100dvh/);
+  expect(source).toMatch(/className="block h-full w-full pointer-events-none"/);
   expect(source).not.toMatch(/overflow-auto/);
   expect(source).not.toMatch(/max-h-full/);
 });

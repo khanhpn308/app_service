@@ -48,9 +48,9 @@
 }
 
 :root {
-  --body-font: 'Roboto', sans-serif;
-  --heading-font: 'Roboto', sans-serif;
-  --button-font: 'Roboto', sans-serif;
+  --body-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --heading-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --button-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius: var(--_apps---sizes--radius);
   --background: var(--_apps---colors--background);
   --foreground: var(--_apps---colors--foreground);

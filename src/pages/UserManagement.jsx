@@ -3,6 +3,7 @@ import { Plus, Search, Users, X, Trash2, Eye, EyeOff } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import AssignDeviceModal from '../components/AssignDeviceModal';
+import { Switch } from '../components/ui/switch';
 
 function defaultExpiredAt() {
   const d = new Date();
@@ -48,6 +49,7 @@ const emptyForm = () => ({
   phone: '',
   expired_at: defaultExpiredAt(),
   role: 'user',
+  can_config_anchor: 'no',
 });
 
 export default function UserManagement() {
@@ -65,6 +67,7 @@ export default function UserManagement() {
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [statusPatchingId, setStatusPatchingId] = useState(null);
+  const [permissionPatchingId, setPermissionPatchingId] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [assignTarget, setAssignTarget] = useState(null);
   /** Ô ngày hết hạn (đăng ký): hiển thị dd/mm/yyyy, không phụ thuộc locale của type="date" */
@@ -166,6 +169,37 @@ export default function UserManagement() {
     }
   };
 
+  const handleAnchorPermissionChange = async (target, checked) => {
+    const previousPermission = target.can_config_anchor ?? 'no';
+    const nextPermission = checked ? 'yes' : 'no';
+    setLoadError('');
+    setPermissionPatchingId(target.user_id);
+    setUsers((items) =>
+      items.map((item) =>
+        item.user_id === target.user_id
+          ? { ...item, can_config_anchor: nextPermission }
+          : item
+      )
+    );
+    try {
+      await apiFetch(`/api/users/${target.user_id}/anchor-permission`, {
+        method: 'PATCH',
+        body: JSON.stringify({ can_config_anchor: nextPermission }),
+      });
+    } catch (error) {
+      setUsers((items) =>
+        items.map((item) =>
+          item.user_id === target.user_id
+            ? { ...item, can_config_anchor: previousPermission }
+            : item
+        )
+      );
+      setLoadError(error.message || 'Cập nhật quyền Anchor thất bại');
+    } finally {
+      setPermissionPatchingId(null);
+    }
+  };
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setSubmitError('');
@@ -207,6 +241,7 @@ export default function UserManagement() {
           phone: phoneVal,
           expired_at: expiredIso,
           role: form.role,
+          can_config_anchor: form.role === 'user' ? form.can_config_anchor : 'no',
         }),
       });
       setModalOpen(false);
@@ -270,7 +305,7 @@ export default function UserManagement() {
       </div>
 
       {loadError && (
-        <div className="p-4 rounded-lg bg-red-900/30 border border-red-700 text-red-200 text-sm">{loadError}</div>
+        <div role="alert" className="p-4 rounded-lg bg-red-900/30 border border-red-700 text-red-200 text-sm">{loadError}</div>
       )}
 
       <div className="relative">
@@ -368,6 +403,33 @@ export default function UserManagement() {
                     <p className="text-muted-foreground text-[10px] mt-1">Không đổi trạng thái tài khoản đang đăng nhập</p>
                   )}
                 </div>
+                <div className="bg-background rounded-lg p-3 border border-border col-span-2">
+                  <p className="text-muted-foreground text-xs mb-2">Quyền cấu hình Anchor</p>
+                  {u.role === 'admin' ? (
+                    <p className="text-sm font-medium text-foreground">
+                      Admin luôn có quyền cấu hình Anchor
+                    </p>
+                  ) : (
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          Cho phép cấu hình Anchor
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Chỉ có hiệu lực khi user là owner của group chứa map.
+                        </p>
+                      </div>
+                      <Switch
+                        aria-label={`Cho phép @${u.username} cấu hình Anchor`}
+                        checked={u.can_config_anchor === 'yes'}
+                        disabled={permissionPatchingId === u.user_id}
+                        onCheckedChange={(checked) =>
+                          handleAnchorPermissionChange(u, checked)
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
                 <div className="bg-background rounded-lg p-3 border border-border">
                   <p className="text-muted-foreground text-xs mb-1">Điện thoại</p>
                   <p className="text-foreground/90">{u.phone ?? '—'}</p>
@@ -408,13 +470,19 @@ export default function UserManagement() {
 
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-          <div className="bg-card border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="register-user-title"
+            className="bg-card border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+          >
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground">Đăng ký tài khoản</h2>
+              <h2 id="register-user-title" className="text-lg font-semibold text-foreground">Đăng ký tài khoản</h2>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
                 className="p-2 rounded-lg hover:bg-muted text-muted-foreground"
+                aria-label="Đóng đăng ký tài khoản"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -502,12 +570,47 @@ export default function UserManagement() {
                 <label className="block text-sm text-foreground/90 mb-1">Vai trò</label>
                 <select
                   value={form.role}
-                  onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      role: e.target.value,
+                      can_config_anchor:
+                        e.target.value === 'admin' ? 'no' : f.can_config_anchor,
+                    }))
+                  }
                   className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground"
                 >
                   <option value="user">user</option>
                   <option value="admin">admin</option>
                 </select>
+              </div>
+              <div className="rounded-lg border border-border bg-background p-3">
+                {form.role === 'admin' ? (
+                  <p className="text-sm font-medium text-foreground">
+                    Admin luôn có quyền cấu hình Anchor
+                  </p>
+                ) : (
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        Cho phép cấu hình Anchor
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Có thể thay đổi lại tại card người dùng.
+                      </p>
+                    </div>
+                    <Switch
+                      aria-label="Cho phép cấu hình Anchor"
+                      checked={form.can_config_anchor === 'yes'}
+                      onCheckedChange={(checked) =>
+                        setForm((current) => ({
+                          ...current,
+                          can_config_anchor: checked ? 'yes' : 'no',
+                        }))
+                      }
+                    />
+                  </div>
+                )}
               </div>
               {submitError && (
                 <div className="p-3 rounded bg-red-900/30 border border-red-700 text-red-200 text-sm">{submitError}</div>

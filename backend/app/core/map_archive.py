@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.map_group import MapGroup
 from app.models.map_location import LocationDeleted, LocationUsing
 from app.models.user import User
+from app.services.anchor_service import archive_location_anchors
 
 
 class DeleteReason(str, Enum):
@@ -69,6 +70,13 @@ def archive_location(
             "archive_context_missing",
             "The active location is missing its group or owner.",
         )
+
+    archive_location_anchors(
+        db,
+        active,
+        deleted_by,
+        reason=reason.value,
+    )
 
     archived = LocationDeleted(
         location_id=active.location_id,

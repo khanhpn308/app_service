@@ -81,6 +81,15 @@ class Settings(BaseSettings):
     mqtt_qos: int = 0
     mqtt_max_messages: int = 500
 
+    gateway_offline_after_seconds: int = 30
+    gateway_presence_flush_seconds: int = 5
+    anchor_dispatcher_enabled: bool = True
+    anchor_dispatcher_poll_seconds: float = 1.0
+    anchor_dispatcher_lease_seconds: int = 30
+    anchor_publish_timeout_seconds: int = 10
+    anchor_retry_schedule_seconds: str = "5,15,30,60,300"
+    anchor_retry_steady_seconds: int = 300
+
     # InfluxDB time-series storage
     influx_enabled: bool = True
     influx_url: str = "http://influxdb:8086"

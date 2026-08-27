@@ -13,6 +13,15 @@ import { apiFetch } from '../lib/api';
 
 const AuthContext = createContext();
 
+/**
+ * Profile do `/api/auth/login` và `/api/auth/me` trả về.
+ * @typedef {Object} AuthUser
+ * @property {number} user_id
+ * @property {string} username
+ * @property {'admin'|'user'} role
+ * @property {'yes'|'no'} can_config_anchor
+ */
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

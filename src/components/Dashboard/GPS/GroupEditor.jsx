@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Trash2, UserMinus, UserPlus } from 'lucide-react';
+import { ArrowLeft, Trash2, UserMinus } from 'lucide-react';
+
+import BulkInvitationForm from './BulkInvitationForm';
 
 
 const STATUS_LABELS = {
@@ -16,12 +18,12 @@ const GroupEditor = ({
   isBusy,
   onBack,
   onRename,
-  onInvite,
+  onInviteBulk,
+  invitationResults,
   onRemove,
   onDelete,
 }) => {
   const [name, setName] = useState(group.name);
-  const [username, setUsername] = useState('');
 
   useEffect(() => {
     setName(group.name);
@@ -30,12 +32,6 @@ const GroupEditor = ({
   const submitRename = async (event) => {
     event.preventDefault();
     await onRename(name.trim());
-  };
-
-  const submitInvite = async (event) => {
-    event.preventDefault();
-    await onInvite(username.trim());
-    setUsername('');
   };
 
   return (
@@ -90,29 +86,11 @@ const GroupEditor = ({
           </div>
         </form>
 
-        <form onSubmit={submitInvite} className="rounded-lg border border-gray-200 p-3">
-          <label htmlFor="invite-map-member" className="text-xs font-medium text-gray-700">
-            Username cần mời
-          </label>
-          <div className="mt-1 flex gap-2">
-            <input
-              id="invite-map-member"
-              required
-              maxLength={45}
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            />
-            <button
-              type="submit"
-              disabled={isBusy || !username.trim()}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-            >
-              <UserPlus aria-hidden="true" className="h-3.5 w-3.5" />
-              Gửi lời mời
-            </button>
-          </div>
-        </form>
+        <BulkInvitationForm
+          isBusy={isBusy}
+          results={invitationResults}
+          onSubmit={onInviteBulk}
+        />
       </div>
 
       <div>

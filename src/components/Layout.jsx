@@ -7,12 +7,12 @@
 import React from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Home, LayoutDashboard, Cpu, Users, LogOut, KeyRound, RadioTower, Menu, Map } from 'lucide-react';
+import { Activity, Home, LayoutDashboard, Cpu, Users, LogOut, KeyRound, RadioTower, Menu } from 'lucide-react';
 
 const Layout = () => {
   const { logout, user, isAdmin } = useAuth();
   const location = useLocation();
-  const [showDashboardMenu, setShowDashboardMenu] = React.useState(false);
+  const isGpsDashboard = location.pathname === '/dashboard/gps';
 
   const navItems = [
     { to: '/home', label: 'Home', icon: Home },
@@ -23,6 +23,7 @@ const Layout = () => {
   if (isAdmin()) {
     navItems.push({ to: '/user-management', label: 'Quản lý người dùng', icon: Users });
     navItems.push({ to: '/topic-management', label: 'Quản lý topic', icon: RadioTower });
+    navItems.push({ to: '/ping', label: 'Ping', icon: Activity });
   }
   navItems.push({ to: '/change-password', label: 'Đổi mật khẩu', icon: KeyRound });
 
@@ -82,14 +83,14 @@ const Layout = () => {
           </div>
 
           {/* Mobile Navigation */}
-          <div className="md:hidden flex justify-around pb-3 space-x-2">
+          <div className="md:hidden flex gap-2 overflow-x-auto pb-3">
             {navItems.map((item) => (
               <NavLink
                 key={`${item.to}-${item.label}`}
                 to={item.to}
                 className={() => {
                   const active = isNavItemActive(item.to);
-                  return `flex flex-col items-center space-y-1 px-3 py-2 rounded-lg transition-all duration-200 ${
+                  return `flex min-w-fit shrink-0 flex-col items-center space-y-1 px-3 py-2 rounded-lg transition-all duration-200 ${
                     active ? 'bg-primary text-foreground' : 'text-foreground/90 hover:bg-card'
                   }`;
                 }}
@@ -104,36 +105,39 @@ const Layout = () => {
 
       {/* Dashboard Sub-navigation (Hamburger Switcher) */}
       {location.pathname.startsWith('/dashboard') && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-          <div className="bg-card border border-border rounded-xl p-2 flex items-center gap-2 shadow-lg">
-            <button 
-              onClick={() => setShowDashboardMenu(!showDashboardMenu)}
-              className="p-2 hover:bg-card rounded-lg text-foreground/90 flex items-center gap-2"
-            >
+        <div className="border-b border-border bg-card px-4 sm:px-6 lg:px-8">
+          <div className="flex min-h-14 w-full items-center gap-3 overflow-x-auto">
+            <div className="flex shrink-0 items-center gap-2 pr-2 text-foreground/90">
               <Menu className="h-5 w-5" />
               <span className="text-sm font-medium">Dashboard Menu</span>
-            </button>
-            <div className={`flex items-center gap-2 transition-all duration-300 ${showDashboardMenu ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4 pointer-events-none'}`}>
-              <NavLink 
-                to="/dashboard" 
-                end
-                className={({ isActive }) => `px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isActive ? 'bg-primary text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-card'}`}
-              >
-                Telemetry
-              </NavLink>
-              <NavLink 
-                to="/dashboard/gps" 
-                className={({ isActive }) => `px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isActive ? 'bg-primary text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-card'}`}
-              >
-                Asset &amp; worker Tracking
-              </NavLink>
             </div>
+              <nav
+                id="dashboard-subnavigation"
+                aria-label="Điều hướng Dashboard"
+                className="flex flex-row items-center gap-1"
+              >
+                <NavLink
+                  to="/dashboard"
+                  end
+                  className={({ isActive }) => `min-h-11 rounded-md px-3 py-3 text-sm font-medium transition-colors ${isActive ? 'bg-primary text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+                >
+                  Telemetry
+                </NavLink>
+                <NavLink
+                  to="/dashboard/gps"
+                  className={({ isActive }) => `min-h-11 whitespace-nowrap rounded-md px-3 py-3 text-sm font-medium transition-colors ${isActive ? 'bg-primary text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+                >
+                  Asset &amp; worker Tracking
+                </NavLink>
+              </nav>
           </div>
         </div>
       )}
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={isGpsDashboard
+        ? 'w-full max-w-none p-0'
+        : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}>
         <Outlet />
       </main>
     </div>

@@ -8,6 +8,7 @@ không chứa logic nghiệp vụ — dễ bật/tắt nhóm API hoặc đổi p
 from fastapi import APIRouter
 
 from .auth_routes import router as auth_router
+from .anchors_routes import router as anchors_router
 from .authorizations_routes import router as authorizations_router
 from .devices_routes import router as devices_router
 from .health import router as health_router
@@ -16,13 +17,16 @@ from .locations_routes import router as locations_router
 from .map_groups_routes import router as map_groups_router
 from .map_routes import router as map_router
 from .mqtt_routes import router as mqtt_router
+from .ping_routes import router as ping_router
 from .users_routes import router as users_router
 from .websocket_routes import router as websocket_router
 
 api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(mqtt_router, tags=["mqtt"])
+api_router.include_router(ping_router)
 api_router.include_router(auth_router)
+api_router.include_router(anchors_router)
 api_router.include_router(devices_router)
 api_router.include_router(authorizations_router)
 api_router.include_router(users_router)

@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   createMapGroup,
   deleteMapGroup,
-  inviteMapGroupMember,
+  inviteMapGroupMembersBulk,
   listMapGroupMembers,
   listMapGroups,
   listMyMapGroupInvitations,
@@ -40,6 +40,7 @@ function MapGroupManagerDialog({ onGroupsChanged }) {
   const [membersLoading, setMembersLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [invitationResults, setInvitationResults] = useState([])
 
   const loadOverview = useCallback(async () => {
     setLoading(true)
@@ -79,6 +80,7 @@ function MapGroupManagerDialog({ onGroupsChanged }) {
     setActiveTab('groups')
     setSelectedGroup(null)
     setMembers([])
+    setInvitationResults([])
     setError('')
   }
 
@@ -98,6 +100,7 @@ function MapGroupManagerDialog({ onGroupsChanged }) {
 
   const handleManage = async (group) => {
     setSelectedGroup(group)
+    setInvitationResults([])
     await loadMembers(group.group_id)
   }
 
@@ -119,14 +122,17 @@ function MapGroupManagerDialog({ onGroupsChanged }) {
     }
   }
 
-  const handleInvite = async (username) => {
+  const handleInviteBulk = async (usernames) => {
     setBusy(true)
     setError('')
     try {
-      await inviteMapGroupMember(selectedGroup.group_id, username)
+      const result = await inviteMapGroupMembersBulk(selectedGroup.group_id, usernames)
+      setInvitationResults(result.results)
       await loadMembers(selectedGroup.group_id)
+      return true
     } catch (requestError) {
       setError(requestError.message || 'Không thể gửi lời mời.')
+      return false
     } finally {
       setBusy(false)
     }
@@ -261,9 +267,11 @@ function MapGroupManagerDialog({ onGroupsChanged }) {
             onBack={() => {
               setSelectedGroup(null)
               setMembers([])
+              setInvitationResults([])
             }}
             onRename={handleRename}
-            onInvite={handleInvite}
+            onInviteBulk={handleInviteBulk}
+            invitationResults={invitationResults}
             onRemove={handleRemoveMember}
             onDelete={handleDelete}
           />

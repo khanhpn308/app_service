@@ -31,6 +31,11 @@ from app.schemas.devices import (
     DevicePublic,
     DeviceUpdate,
 )
+from app.services.anchor_delivery_service import (
+    bootstrap_gateway_configuration,
+    gateway_publish_topic_in_use,
+    reconcile_gateway_change,
+)
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -67,10 +72,20 @@ def list_devices_admin(
 @router.post("", response_model=DevicePublic, status_code=status.HTTP_201_CREATED)
 def create_device(
     body: DeviceCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    actor: User = Depends(require_admin),
 ) -> DevicePublic:
     """Admin: tạo thiết bị mới; 409 nếu trùng khóa chính ``device_id``."""
+    is_gateway = (body.device_type or "").strip().casefold() == "gateway"
+    topic = body.topic
+    publish_topic = body.publish_topic
+    if is_gateway:
+        topic = str(topic or "").strip() or f"gateway/{body.device_id}/backend_receive"
+        publish_topic = (
+            str(publish_topic or "").strip()
+            or f"gateway/{body.device_id}/backend_send"
+        )
     row = Device(
         device_id=body.device_id,
         devicename=body.devicename,
@@ -80,16 +95,25 @@ def create_device(
         user_device_asignment_id=body.user_device_asignment_id,
         location=body.location,
         device_type=body.device_type,
-        topic=body.topic,
-        publish_topic=body.publish_topic,
+        topic=topic,
+        publish_topic=publish_topic,
     )
     db.add(row)
     try:
+        db.flush()
+        if gateway_publish_topic_in_use(db, row):
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Gateway publish topic already in use",
+            )
+        bootstrap_gateway_configuration(db, row, actor)
         db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Device already exists")
     db.refresh(row)
+    _sync_topic_runtime(request, "", str(row.topic or "").strip())
     return DevicePublic.model_validate(row)
 
 
@@ -99,7 +123,7 @@ def patch_device(
     body: DeviceUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    actor: User = Depends(require_admin),
 ) -> DevicePublic:
     """Admin: cập nhật một phần trường tĩnh trên thiết bị."""
     row = db.query(Device).filter(Device.device_id == device_id).first()
@@ -111,9 +135,20 @@ def patch_device(
     if data.get("password"):
         data["password"] = hash_password(data["password"])
     old_topic = (row.topic or "").strip()
+    old_location = row.location
     for key, val in data.items():
         setattr(row, key, val)
 
+    db.flush()
+    if gateway_publish_topic_in_use(db, row):
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Gateway publish topic already in use",
+        )
+    reconcile_gateway_change(db, row, old_location=old_location)
+    if {"location", "device_type", "status", "publish_topic"} & data.keys():
+        bootstrap_gateway_configuration(db, row, actor)
     db.commit()
     db.refresh(row)
 
@@ -148,7 +183,7 @@ def update_device_topic(
     body: DeviceTopicUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    actor: User = Depends(require_admin),
 ) -> DeviceTopicPublic:
     """Admin: cập nhật topic thiết bị và đồng bộ subscribe runtime."""
     row = db.query(Device).filter(Device.device_id == device_id).first()
@@ -157,11 +192,23 @@ def update_device_topic(
 
     data = body.model_dump(exclude_unset=True)
     old_topic = (row.topic or "").strip()
+    old_location = row.location
     if "topic" in data:
         row.topic = (body.topic or "").strip() or None
     if "publish_topic" in data:
         row.publish_topic = (body.publish_topic or "").strip() or None
 
+    db.flush()
+    if gateway_publish_topic_in_use(db, row):
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Gateway publish topic already in use",
+        )
+    if "publish_topic" in data:
+        bootstrap_gateway_configuration(db, row, actor)
+    else:
+        reconcile_gateway_change(db, row, old_location=old_location)
     db.commit()
     db.refresh(row)
 
@@ -206,6 +253,9 @@ def delete_device(
     row = db.query(Device).filter(Device.device_id == device_id).first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    old_location = row.location
+    row.status = "inactive"
+    reconcile_gateway_change(db, row, old_location=old_location)
     db.query(DeviceAuthorization).filter(DeviceAuthorization.device_id == device_id).delete(
         synchronize_session=False
     )

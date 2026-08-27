@@ -83,7 +83,10 @@ const GPSPage = () => {
   );
 
   return (
-    <div className="h-[calc(100vh-120px)] bg-white rounded-xl shadow-xl overflow-hidden">
+    <div
+      data-testid="gps-page-shell"
+      className="h-[calc(100dvh-120px)] min-h-[32rem] w-full min-w-0 overflow-hidden bg-white"
+    >
       <GPSDashboard initialDevices={devices} />
     </div>
   );

@@ -39,6 +39,13 @@ export function inviteMapGroupMember(groupId, username) {
   });
 }
 
+export function inviteMapGroupMembersBulk(groupId, usernames) {
+  return apiFetch(`/api/map-groups/${groupId}/invitations/bulk`, {
+    method: 'POST',
+    body: JSON.stringify({ usernames }),
+  });
+}
+
 
 export function removeMapGroupMember(groupId, userId) {
   return apiFetch(`/api/map-groups/${groupId}/members/${userId}`, {

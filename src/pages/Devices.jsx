@@ -38,6 +38,7 @@ const DeviceCardSkeleton = () => (
 
 const normalizeDeviceType = (type) => {
   const t = String(type || '').trim().toLowerCase();
+  if (t === 'gateway') return 'Gateway';
   if (t === 'temperature' || t.includes('nhiệt')) return 'Temperature';
   if (t === 'power' || t.includes('công suất')) return 'Power';
   if (t === 'vibration' || t.includes('độ rung')) return 'Vibration';

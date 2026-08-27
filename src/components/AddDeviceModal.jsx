@@ -3,6 +3,7 @@ import { X, Cpu, AlertCircle } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 
 const AddDeviceModal = ({ onClose, onAdd }) => {
+  const [deviceId] = useState(() => Math.floor(Date.now() % 1000000));
   const [formData, setFormData] = useState({
     name: '',
     type: 'Temperature',
@@ -20,7 +21,11 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
     { value: 'Power', label: 'Công suất (Power)' },
     { value: 'Vibration', label: 'Độ rung (Vibration)' },
     { value: 'GPS', label: 'Định vị (GPS)' },
+    { value: 'gateway', label: 'Gateway' },
   ];
+
+  const gatewayReceiveTopic = `gateway/${deviceId}/backend_receive`;
+  const gatewaySendTopic = `gateway/${deviceId}/backend_send`;
 
   const validateForm = () => {
     const newErrors = {};
@@ -44,9 +49,23 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
+    const { name, value } = e.target;
+    setFormData((current) => {
+      if (name !== 'type') return { ...current, [name]: value };
+      if (value === 'gateway') {
+        return {
+          ...current,
+          type: value,
+          topic: current.topic.trim() || gatewayReceiveTopic,
+          publishTopic: current.publishTopic.trim() || gatewaySendTopic,
+        };
+      }
+      return {
+        ...current,
+        type: value,
+        topic: current.topic === gatewayReceiveTopic ? '' : current.topic,
+        publishTopic: current.publishTopic === gatewaySendTopic ? '' : current.publishTopic,
+      };
     });
   };
 
@@ -58,7 +77,6 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
       setSubmitError('');
       try {
         // DB schema: device_id (INT), devicename (VARCHAR), password, status, user_device_asignment_id (NOT NULL)
-        const deviceId = Math.floor(Date.now() % 1000000);
         const unit =
           formData.type === 'Temperature'
             ? '°C'
@@ -80,8 +98,12 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
             user_device_asignment_id: 0,
             location: formData.location,
             device_type: formData.type,
-            topic: formData.topic.trim() || null,
-            publish_topic: formData.publishTopic.trim() || null,
+            topic:
+              formData.topic.trim() ||
+              (formData.type === 'gateway' ? gatewayReceiveTopic : null),
+            publish_topic:
+              formData.publishTopic.trim() ||
+              (formData.type === 'gateway' ? gatewaySendTopic : null),
           }),
         });
 
@@ -107,16 +129,23 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-card rounded-2xl shadow-2xl max-w-md w-full border border-border max-h-[90vh] overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-device-title"
+        className="bg-card rounded-2xl shadow-2xl max-w-md w-full border border-border max-h-[90vh] overflow-y-auto"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-blue-500/20 rounded-lg">
               <Cpu className="h-6 w-6 text-primary" />
             </div>
-            <h2 className="text-xl font-bold text-foreground">Add New Device</h2>
+            <h2 id="add-device-title" className="text-xl font-bold text-foreground">Add New Device</h2>
           </div>
           <button
+            type="button"
+            aria-label="Close add device dialog"
             onClick={onClose}
             className="p-2 hover:bg-card rounded-lg transition-colors duration-200"
           >
@@ -133,10 +162,11 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
           )}
           {/* Device Name */}
           <div>
-            <label className="block text-sm font-medium text-foreground/90 mb-2">
-              Device Name *
+            <label htmlFor="add-device-name" className="block text-sm font-medium text-foreground/90 mb-2">
+              Device Name<span aria-hidden="true"> *</span>
             </label>
             <input
+              id="add-device-name"
               type="text"
               name="name"
               value={formData.name}
@@ -156,10 +186,11 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
 
           {/* Device Type */}
           <div>
-            <label className="block text-sm font-medium text-foreground/90 mb-2">
-              Device Type *
+            <label htmlFor="add-device-type" className="block text-sm font-medium text-foreground/90 mb-2">
+              Device Type<span aria-hidden="true"> *</span>
             </label>
             <select
+              id="add-device-type"
               name="type"
               value={formData.type}
               onChange={handleChange}
@@ -171,12 +202,19 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
             </select>
           </div>
 
+          {formData.type === 'gateway' && (
+            <p className="text-sm text-muted-foreground" role="status">
+              Device ID: {deviceId}
+            </p>
+          )}
+
           {/* Location */}
           <div>
-            <label className="block text-sm font-medium text-foreground/90 mb-2">
-              Location *
+            <label htmlFor="add-device-location" className="block text-sm font-medium text-foreground/90 mb-2">
+              Location<span aria-hidden="true"> *</span>
             </label>
             <input
+              id="add-device-location"
               type="text"
               name="location"
               value={formData.location}
@@ -196,10 +234,11 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
 
           {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-foreground/90 mb-2">
-              Device Password *
+            <label htmlFor="add-device-password" className="block text-sm font-medium text-foreground/90 mb-2">
+              Device Password<span aria-hidden="true"> *</span>
             </label>
             <input
+              id="add-device-password"
               type="password"
               name="password"
               value={formData.password}
@@ -218,31 +257,39 @@ const AddDeviceModal = ({ onClose, onAdd }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground/90 mb-2">
-              MQTT Topic Nhan (optional)
+            <label htmlFor="add-device-topic" className="block text-sm font-medium text-foreground/90 mb-2">
+              MQTT Topic backend nhận
             </label>
             <input
+              id="add-device-topic"
               type="text"
               name="topic"
               value={formData.topic}
               onChange={handleChange}
               className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
-              placeholder="devices/101/telemetry"
+              placeholder={formData.type === 'gateway' ? gatewayReceiveTopic : 'devices/101/telemetry'}
             />
+            {formData.type === 'gateway' && (
+              <p className="mt-1 text-xs text-muted-foreground">Gateway publish ACK và telemetry lên topic này.</p>
+            )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground/90 mb-2">
-              MQTT Topic Gui (optional)
+            <label htmlFor="add-device-publish-topic" className="block text-sm font-medium text-foreground/90 mb-2">
+              MQTT Topic backend gửi
             </label>
             <input
+              id="add-device-publish-topic"
               type="text"
               name="publishTopic"
               value={formData.publishTopic}
               onChange={handleChange}
               className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200"
-              placeholder="devices/101/downlink"
+              placeholder={formData.type === 'gateway' ? gatewaySendTopic : 'devices/101/downlink'}
             />
+            {formData.type === 'gateway' && (
+              <p className="mt-1 text-xs text-muted-foreground">Gateway subscribe topic này để nhận cấu hình Anchor.</p>
+            )}
           </div>
 
           {/* Buttons */}

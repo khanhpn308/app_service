@@ -14,7 +14,7 @@ Lưu ý: ``creat_at`` là tên cột lịch sử (typo *creat* thay vì *created
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Integer, String, func
+from sqlalchemy import Date, DateTime, Enum, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -39,6 +39,11 @@ class User(Base):
     expired_at: Mapped[date | None] = mapped_column("expired_at", Date, nullable=True)
     status: Mapped[str] = mapped_column(String(10), nullable=False)
     role: Mapped[str] = mapped_column(String(10), nullable=False)
+    can_config_anchor: Mapped[str] = mapped_column(
+        Enum("yes", "no", name="user_can_config_anchor", create_constraint=True),
+        nullable=False,
+        server_default="no",
+    )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, server_default=func.now(), onupdate=func.now()
     )

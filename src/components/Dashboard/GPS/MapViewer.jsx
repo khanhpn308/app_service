@@ -1,11 +1,60 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, getColor, getDeviceName }) => {
+const snapCoordinate = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
+
+const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, anchors = [], canConfigureAnchors = false, onAnchorClick, onAnchorMove, getColor, getDeviceName }) => {
   const [aspectRatio, setAspectRatio] = useState(null);
+  const [frameSize, setFrameSize] = useState(null);
+  const containerRef = useRef(null);
+  const draggingAnchor = useRef(null);
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || !aspectRatio) return undefined
+
+    const fitFrame = () => {
+      const { width: availableWidth, height: availableHeight } = container.getBoundingClientRect()
+      if (!availableWidth || !availableHeight) return
+
+      const availableRatio = availableWidth / availableHeight
+      const width = aspectRatio >= availableRatio
+        ? availableWidth
+        : availableHeight * aspectRatio
+      const height = aspectRatio >= availableRatio
+        ? availableWidth / aspectRatio
+        : availableHeight
+
+      setFrameSize((current) => (
+        current && Math.abs(current.width - width) < 0.5 && Math.abs(current.height - height) < 0.5
+          ? current
+          : { width, height }
+      ))
+    }
+
+    fitFrame()
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', fitFrame)
+      return () => window.removeEventListener('resize', fitFrame)
+    }
+
+    const observer = new ResizeObserver(fitFrame)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [aspectRatio])
+
+  function moveAnchor(event) {
+    if (!draggingAnchor.current || !onAnchorMove) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const clamp = (value) => Math.max(0, Math.min(100, value))
+    const x = snapCoordinate(clamp(((event.clientX - rect.left) / rect.width) * 100))
+    const y = snapCoordinate(clamp(100 - ((event.clientY - rect.top) / rect.height) * 100))
+    onAnchorMove(draggingAnchor.current, x, y)
+  }
 
   if (!locationName) {
     return (
-      <div className="relative w-full bg-red-50 border border-red-100 rounded-xl overflow-hidden flex items-center justify-center" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+      <div className="relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-hidden border border-red-200 bg-red-50">
         <div className="text-center p-6">
           <div className="text-4xl mb-2">🗺️</div>
           <p className="text-red-500 font-bold">Chưa chọn khu vực</p>
@@ -17,7 +66,7 @@ const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, g
 
   if (hasError) {
     return (
-      <div className="relative w-full bg-gray-50 border border-gray-200 rounded-xl overflow-hidden shadow-inner min-h-[320px] flex items-center justify-center" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+      <div className="relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-hidden border border-slate-300 bg-white">
         <div className="text-center p-6">
           <div className="text-4xl mb-2">🖼️</div>
           <p className="text-gray-700 font-bold">Không tìm thấy ảnh mặt bằng</p>
@@ -31,7 +80,7 @@ const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, g
 
   if (isLoading || !floorplanUrl) {
     return (
-      <div className="relative w-full bg-gray-50 border border-gray-200 rounded-xl overflow-hidden shadow-inner min-h-[320px] flex items-center justify-center" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+      <div className="relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-hidden border border-slate-300 bg-white">
         <div className="text-center p-6">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mx-auto mb-3" />
           <p className="text-gray-700 font-bold">Đang tải mặt bằng...</p>
@@ -41,24 +90,21 @@ const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, g
     );
   }
 
-  const mapFrameStyle = aspectRatio
-    ? {
-        width: `min(100%, 800px, calc((100vh - 360px) * ${aspectRatio}))`,
-        aspectRatio,
-      }
-    : { width: 'min(100%, 800px)' };
+  const mapFrameStyle = frameSize
+    ? { width: `${frameSize.width}px`, height: `${frameSize.height}px` }
+    : { width: '100%', maxHeight: '100%', aspectRatio: aspectRatio || 'auto' };
 
   return (
-    <div className="w-full flex justify-center overflow-hidden">
+    <div ref={containerRef} className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden bg-white">
       <div
-        className="relative mx-auto w-full max-w-[800px] bg-gray-50 border border-gray-200 rounded-xl overflow-hidden shadow-inner"
+        className="relative w-full overflow-hidden bg-white"
         style={mapFrameStyle}
       >
         <img
           src={floorplanUrl}
           key={floorplanUrl}
           alt={`Bản đồ ${locationName}`}
-          className="block w-full h-full pointer-events-none"
+          className="block h-full w-full pointer-events-none"
           onLoad={(event) => {
             const { naturalWidth, naturalHeight } = event.currentTarget;
             if (naturalWidth > 0 && naturalHeight > 0) {
@@ -67,7 +113,13 @@ const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, g
           }}
         />
 
-        <div className="absolute inset-0 z-10">
+        <div
+          data-testid="map-coordinate-overlay"
+          className="absolute inset-0 z-10 touch-none"
+          onPointerMove={moveAnchor}
+          onPointerUp={() => { draggingAnchor.current = null }}
+          onPointerCancel={() => { draggingAnchor.current = null }}
+        >
           {devices.map((device) => {
             if (device.x === null || device.y === null) return null;
 
@@ -105,6 +157,41 @@ const MapViewer = ({ locationName, floorplanUrl, isLoading, hasError, devices, g
                 </div>
               </div>
             );
+          })}
+          {anchors.map((anchor) => {
+            const x = snapCoordinate(anchor.x)
+            const y = snapCoordinate(anchor.y)
+            const style = {
+              left: `${x}%`,
+              top: `${snapCoordinate(100 - y)}%`,
+              transform: 'translate(-50%, -50%)',
+            }
+            const markerClass = 'absolute z-20 flex -translate-y-0 flex-col items-center text-amber-700'
+            const content = (
+              <>
+                <span className="h-4 w-4 rotate-45 rounded-sm border-2 border-white bg-amber-500 shadow-lg ring-2 ring-amber-700" />
+                <span className="mt-1 max-w-24 truncate rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold shadow">{anchor.name}</span>
+              </>
+            )
+            if (!canConfigureAnchors) {
+              return <div key={anchor.anchor_id ?? anchor.mac_address ?? anchor.hardware_id} aria-label={`Anchor ${anchor.name}`} className={markerClass} style={style}>{content}</div>
+            }
+            return (
+              <button
+                key={anchor.anchor_id ?? anchor.mac_address ?? anchor.hardware_id}
+                type="button"
+                aria-label={`Anchor ${anchor.name}`}
+                className={`${markerClass} cursor-grab active:cursor-grabbing`}
+                style={style}
+                onPointerDown={(event) => {
+                  event.currentTarget.setPointerCapture?.(event.pointerId)
+                  draggingAnchor.current = anchor
+                  onAnchorClick?.(anchor)
+                }}
+              >
+                {content}
+              </button>
+            )
           })}
         </div>
       </div>
